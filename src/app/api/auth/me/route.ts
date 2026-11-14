@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clearAuthCookie, readAuthToken } from "@/lib/auth-cookie";
+import { getBackendUrl } from "@/lib/backend-url";
 
 type CurrentUser = {
   userId: string;
@@ -18,17 +19,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   }
 
-  const apiUrl = process.env.API_URL;
-  if (!apiUrl) {
-    return NextResponse.json(
-      { message: "Backend API URL is not configured." },
-      { status: 500 }
-    );
-  }
+  const apiUrl = getBackendUrl();
 
   try {
     const response = await fetch(
-      `${apiUrl.replace(/\/$/, "")}/api/v1/auth/me`,
+      `${apiUrl}/api/v1/auth/me`,
       {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",

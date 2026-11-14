@@ -1,19 +1,14 @@
 import { NextResponse } from "next/server";
+import { getBackendUrl } from "@/lib/backend-url";
 
 const noStore = { "Cache-Control": "no-store" };
 
 export async function GET() {
-  const apiUrl = process.env.API_URL;
-  if (!apiUrl) {
-    return NextResponse.json(
-      { status: "unavailable", message: "Backend API URL is not configured." },
-      { status: 500, headers: noStore }
-    );
-  }
+  const apiUrl = getBackendUrl();
 
   try {
     const response = await fetch(
-      `${apiUrl.replace(/\/$/, "")}/actuator/health`,
+      `${apiUrl}/actuator/health`,
       {
         headers: { Accept: "application/json" },
         cache: "no-store",

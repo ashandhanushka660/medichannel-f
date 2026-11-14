@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readAuthToken } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
+import { getBackendUrl } from "@/lib/backend-url";
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -15,17 +16,9 @@ async function forwardRequest(
     if (rejection) return rejection;
   }
 
-  const apiUrl = process.env.API_URL;
-
-  if (!apiUrl) {
-    return NextResponse.json(
-      { message: "Backend API URL is not configured." },
-      { status: 500 }
-    );
-  }
-
+  const apiUrl = getBackendUrl();
   const { path } = await context.params;
-  const targetUrl = `${apiUrl.replace(/\/$/, "")}/api/v1/${path.join("/")}${request.nextUrl.search}`;
+  const targetUrl = `${apiUrl}/api/v1/${path.join("/")}${request.nextUrl.search}`;
 
   const headers = new Headers();
   const incomingAuth = request.headers.get("authorization");

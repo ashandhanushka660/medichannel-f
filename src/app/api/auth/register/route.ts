@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
+import { getBackendUrl } from "@/lib/backend-url";
 
 type BackendError = { message?: string };
 
 const backendUrl = () => {
-  const url = process.env.API_URL;
-  return url ? url.replace(/\/$/, "") : null;
+  return getBackendUrl();
 };
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {

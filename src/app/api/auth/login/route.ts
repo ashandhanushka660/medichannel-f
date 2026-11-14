@@ -1,25 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
+import { getBackendUrl } from "@/lib/backend-url";
 
 export async function POST(request: NextRequest) {
   const rejection = rejectCrossOriginMutation(request);
   if (rejection) return rejection;
 
-  const apiUrl = process.env.API_URL;
-
-  if (!apiUrl) {
-    return NextResponse.json(
-      { message: "Backend API URL is not configured." },
-      { status: 500 }
-    );
-  }
+  const apiUrl = getBackendUrl();
 
   try {
     const body = await request.json();
 
     const response = await fetch(
-      `${apiUrl.replace(/\/$/, "")}/api/v1/auth/login`,
+      `${apiUrl}/api/v1/auth/login`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
