@@ -237,6 +237,51 @@
       });
     },
 
+    adminUpdateDoctor(doctorId, payload) {
+      return request(
+        "doctors/" + encodeURIComponent(doctorId),
+        {
+          method: "PUT",
+          body: payload,
+        }
+      );
+    },
+
+    adminCreateUser(payload) {
+      return request("admin/users", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
+    adminUpdateUser(userId, payload) {
+      return request(
+        "admin/users/" + encodeURIComponent(userId),
+        {
+          method: "PATCH",
+          body: payload,
+        }
+      );
+    },
+
+    adminDeleteUser(userId) {
+      return request(
+        "admin/users/" + encodeURIComponent(userId),
+        {
+          method: "DELETE",
+        }
+      );
+    },
+
+    adminDeleteDoctor(doctorId) {
+      return request(
+        "doctors/" + encodeURIComponent(doctorId),
+        {
+          method: "DELETE",
+        }
+      );
+    },
+
     adminUsers(params) {
       return request("admin/users" + query(params));
     },

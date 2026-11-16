@@ -3710,34 +3710,41 @@
   }
 
   async function loadAdminSpecialisations() {
-    const select = $("admin-spec");
-    if (!select || select.dataset.loaded === "true") return;
+    const selects = Array.from(
+      document.querySelectorAll("[data-specialisation-select]")
+    ).filter((select) => select.dataset.loaded !== "true");
+    if (!selects.length) return;
 
     try {
       const items = await MC.specialisations();
       if (!Array.isArray(items)) return;
-      select.replaceChildren();
 
-      const placeholder = el("option", "", "Select specialisation…");
-      placeholder.value = "";
-      placeholder.selected = true;
-      placeholder.disabled = true;
-      select.append(placeholder);
+      selects.forEach((select) => {
+        select.replaceChildren();
 
-      items.forEach((specialisation) => {
-        const option = el(
-          "option",
-          "",
-          specialisation.name || specialisation.displayName || specialisation.title || "Specialisation"
-        );
-        option.value = specialisation.specialisationId || specialisation.id;
-        select.append(option);
+        const placeholder = el("option", "", "Select specialisation…");
+        placeholder.value = "";
+        placeholder.selected = true;
+        placeholder.disabled = true;
+        select.append(placeholder);
+
+        items.forEach((specialisation) => {
+          const option = el(
+            "option",
+            "",
+            specialisation.name || specialisation.displayName || specialisation.title || "Specialisation"
+          );
+          option.value = specialisation.specialisationId || specialisation.id;
+          select.append(option);
+        });
+
+        select.dataset.loaded = "true";
       });
-
-      select.dataset.loaded = "true";
     } catch (error) {
       // Fall back silently; creation will surface the real error.
-      select.dataset.loaded = "true";
+      selects.forEach((select) => {
+        select.dataset.loaded = "true";
+      });
       console.error(error);
     }
   }
@@ -3777,6 +3784,9 @@
     }
   }
 
+  const staffDirectory = new Map();
+  let staffDoctorProfiles = new Map();
+
   async function loadStaffAccounts() {
     const adminTbody = document.querySelector("[data-staff-tbody]");
     const managerTbody = document.querySelector("[data-manager-staff-tbody]");
@@ -3795,7 +3805,35 @@
         ? doctorsResp.value
         : [];
 
+      staffDirectory.clear();
+      staffDoctorProfiles = new Map(
+        doctors.map((doctor) => [doctor.doctorId, doctor])
+      );
+
       const staffList = users.filter((u) => ["DOCTOR", "MANAGER", "ADMIN"].includes(u.role));
+
+      function displayNameFor(member) {
+        if (member.role === "DOCTOR") {
+          const profile = member.doctorId
+            ? staffDoctorProfiles.get(member.doctorId)
+            : null;
+          if (profile) return "Dr. " + profile.firstName + " " + profile.lastName;
+          return "Dr. " + titleCase(
+            member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()
+          );
+        }
+        if (member.role === "MANAGER") {
+          return titleCase(
+            member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()
+          ) + " (Manager)";
+        }
+        if (member.role === "ADMIN") {
+          return titleCase(
+            member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()
+          ) + " (Admin)";
+        }
+        return member.email;
+      }
 
       function renderStaffRows(tbody, isActionable) {
         if (!tbody) return;
@@ -3803,29 +3841,15 @@
 
         if (!staffList.length) {
           const tr = el("tr");
-          tr.innerHTML = '<td colspan="5" class="text-center py-4 text-mute">No staff accounts found.</td>';
+          tr.innerHTML = `<td colspan="${isActionable ? 5 : 4}" class="text-center py-4 text-mute">No staff accounts found.</td>`;
           tbody.append(tr);
           return;
         }
 
         staffList.forEach((member) => {
+          staffDirectory.set(member.userId, member);
           const tr = el("tr");
-
-          let displayName = member.email;
-          if (member.role === "DOCTOR") {
-            const emailPart = member.email.split("@")[0].toLowerCase().replace(/[^a-z]/g, "");
-            const matched = doctors.find((d) => {
-              const docName = ((d.firstName || "") + (d.lastName || "")).toLowerCase().replace(/[^a-z]/g, "");
-              return docName.includes(emailPart) || emailPart.includes(docName.slice(0, 4));
-            });
-            displayName = matched
-              ? "Dr. " + matched.firstName + " " + matched.lastName
-              : "Dr. " + titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim());
-          } else if (member.role === "MANAGER") {
-            displayName = member.email.startsWith("manager") ? "Ruwan Silva (Manager)" : titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()) + " (Manager)";
-          } else if (member.role === "ADMIN") {
-            displayName = member.email.startsWith("admin") ? "Isuru Bandara (Admin)" : titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()) + " (Admin)";
-          }
+          const displayName = displayNameFor(member);
 
           const roleBadge = member.role === "DOCTOR"
             ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-teal-50 text-teal-900 border-teal-200">Doctor</span>'
@@ -3834,21 +3858,31 @@
             : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-red-100 text-red-900 border-red-200">Admin</span>';
 
           const isActive = member.accountStatus === "ACTIVE";
+          const isDeleted = member.accountStatus === "DELETED";
+          const isSelf = Boolean(S && S.email && S.email === member.email);
           const statusBadge = isActive
             ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-green-50 text-green-800 border-green-200">Active</span>'
-            : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-orange-50 text-orange-800 border-orange-200">' + member.accountStatus + '</span>';
+            : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-orange-50 text-orange-800 border-orange-200">' + escapeHtml(member.accountStatus) + '</span>';
 
           let actionHtml = "";
           if (isActionable) {
-            const toggleBtn = isActive
-              ? `<button type="button" data-toggle-user="${member.userId}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
-              : `<button type="button" data-toggle-user="${member.userId}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
-            actionHtml = `<td data-label="">${toggleBtn}</td>`;
+            const editBtn = isDeleted
+              ? ""
+              : `<button type="button" data-edit-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Edit</button>`;
+            const toggleBtn = (isDeleted || isSelf)
+              ? ""
+              : isActive
+                ? `<button type="button" data-toggle-user="${member.userId}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
+                : `<button type="button" data-toggle-user="${member.userId}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
+            const deleteBtn = (isDeleted || isSelf)
+              ? ""
+              : `<button type="button" data-delete-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 min-h-8 px-2.5 py-1 text-xs">Delete</button>`;
+            actionHtml = `<td data-label="Actions"><div class="flex flex-wrap gap-1.5">${editBtn}${toggleBtn}${deleteBtn}</div></td>`;
           }
 
           tr.innerHTML = `
-            <td data-label="Name" class="font-semibold text-ink">${displayName}</td>
-            <td data-label="Email" class="text-slate2">${member.email}</td>
+            <td data-label="Name" class="font-semibold text-ink">${escapeHtml(displayName)}</td>
+            <td data-label="Email" class="text-slate2">${escapeHtml(member.email)}</td>
             <td data-label="Role">${roleBadge}</td>
             <td data-label="Status">${statusBadge}</td>
             ${actionHtml}
@@ -3862,6 +3896,76 @@
     } catch (err) {
       console.warn("Could not load staff accounts:", err);
     }
+  }
+
+  function openEditAccount(userId) {
+    const member = staffDirectory.get(userId);
+    const dialog = $("edit-account-dialog");
+    const form = $("edit-account-form");
+    if (!member || !dialog || !form) return;
+
+    const isDoctor = member.role === "DOCTOR";
+    form.dataset.userId = member.userId;
+    form.dataset.role = member.role;
+    form.dataset.doctorId = member.doctorId || "";
+
+    const title = $("edit-account-title");
+    const subtitle = form.querySelector("[data-edit-subtitle]");
+    const doctorFields = form.querySelector("[data-edit-doctor-fields]");
+    const userFields = form.querySelector("[data-edit-user-fields]");
+
+    if (title) {
+      title.textContent = isDoctor ? "Edit doctor profile" : "Edit account";
+    }
+    if (subtitle) {
+      subtitle.textContent = member.email + " · " + (ROLE_LABELS[member.role] || member.role);
+    }
+    if (doctorFields) {
+      doctorFields.hidden = !isDoctor;
+      doctorFields.querySelectorAll("input, select").forEach((input) => {
+        input.required = isDoctor;
+      });
+    }
+    if (userFields) userFields.hidden = isDoctor;
+
+    if (isDoctor) {
+      const profile = staffDoctorProfiles.get(member.doctorId);
+      const set = (name, value) => {
+        const input = form.querySelector(`[data-edit-field="${name}"]`);
+        if (input) input.value = value == null ? "" : value;
+      };
+      set("firstName", profile ? profile.firstName : "");
+      set("lastName", profile ? profile.lastName : "");
+      set("registrationNumber", profile ? profile.registrationNumber : "");
+      set("qualification", profile ? profile.qualification : "");
+      set("specialisationId", profile ? profile.specialisationId : "");
+      set("consultationFee", profile ? profile.consultationFee : "");
+    } else {
+      const email = form.querySelector('[data-edit-field="email"]');
+      if (email) email.value = member.email || "";
+    }
+
+    setStatus(form.querySelector("[data-edit-status]"), "");
+    void loadAdminSpecialisations();
+    dialog.showModal();
+  }
+
+  function openDeleteAccount(userId) {
+    const member = staffDirectory.get(userId);
+    const dialog = $("delete-account-dialog");
+    const form = $("delete-account-form");
+    if (!member || !dialog || !form) return;
+
+    form.dataset.userId = member.userId;
+    const email = form.querySelector("[data-delete-email]");
+    if (email) email.textContent = member.email;
+    const confirmInput = form.querySelector("[data-delete-confirm]");
+    if (confirmInput) confirmInput.value = "";
+    const submit = form.querySelector("[data-delete-submit]");
+    if (submit) submit.disabled = true;
+    setStatus(form.querySelector("[data-delete-status]"), "");
+    dialog.showModal();
+    if (confirmInput) confirmInput.focus();
   }
 
   function renderAuditLogRow(log) {
@@ -3943,59 +4047,120 @@
     }
   }
 
-  async function handleAdminCreateDoctor(form) {
-    const status = form.querySelector("[data-admin-create-status]");
+  const ROLE_LABELS = {
+    DOCTOR: "doctor",
+    MANAGER: "manager",
+    CUSTOMER: "patient",
+    ADMIN: "administrator",
+  };
+
+  function readFormField(form, name) {
+    const node = form.querySelector(`[data-field="${name}"]`);
+    return node ? String(node.value || "").trim() : "";
+  }
+
+  function syncCreateFormRole(form) {
+    const roleSelect = form.querySelector("[data-role-select]");
+    if (!roleSelect) return;
+
+    const isDoctor = roleSelect.value === "DOCTOR";
+    form.querySelectorAll("[data-doctor-field]").forEach((field) => {
+      field.hidden = !isDoctor;
+      field.querySelectorAll("input, select").forEach((input) => {
+        input.required = isDoctor;
+      });
+    });
+
+    const note = form.querySelector("[data-role-note]");
+    if (note) {
+      note.textContent = isDoctor
+        ? "The password is temporary. The doctor must change it at first login."
+        : "The account is activated immediately. Share the temporary password securely; the user can change it after signing in.";
+    }
+  }
+
+  async function handleCreateAccount(form) {
+    const status = form.querySelector("[data-create-status]") ||
+      form.querySelector("[data-admin-create-status]");
     const button = form.querySelector("button[type=submit]");
 
-    const initialPassword = ($("admin-pw") || {}).value || "";
-    const confirmPassword = ($("admin-cf") || {}).value || "";
+    const role = readFormField(form, "role").toUpperCase();
+    const email = readFormField(form, "email");
+    const firstName = readFormField(form, "firstName");
+    const lastName = readFormField(form, "lastName");
+    const password = readFormField(form, "password");
+    const confirmPassword = readFormField(form, "confirmPassword");
+    const registrationNumber = readFormField(form, "registrationNumber");
+    const qualification = readFormField(form, "qualification");
+    const specialisationId = readFormField(form, "specialisationId");
+    const consultationFee = Number(readFormField(form, "consultationFee") || 0);
 
-    const payload = {
-      email: ($("admin-em") || {}).value || "",
-      initialPassword: initialPassword,
-      confirmPassword: confirmPassword,
-      firstName: ($("admin-fn") || {}).value || "",
-      lastName: ($("admin-ln") || {}).value || "",
-      registrationNumber: ($("admin-reg") || {}).value || "",
-      qualification: ($("admin-qual") || {}).value || "",
-      specialisationId: ($("admin-spec") || {}).value || "",
-      consultationFee: Number(($("admin-fee") || {}).value || 0),
-    };
-
-    if (!payload.email || !initialPassword || !confirmPassword || !payload.firstName ||
-        !payload.lastName || !payload.registrationNumber ||
-        !payload.specialisationId || !(payload.consultationFee >= 0)) {
+    if (!email || !password || !confirmPassword || !firstName || !lastName) {
       setStatus(status, "Please fill in every required field.", true);
       return;
     }
 
-    if (initialPassword !== confirmPassword) {
+    if (role === "DOCTOR" &&
+        (!registrationNumber || !specialisationId || !(consultationFee >= 0))) {
+      setStatus(status, "Please fill in every required doctor field.", true);
+      return;
+    }
+
+    if (password !== confirmPassword) {
       setStatus(status, "The passwords do not match.", true);
       return;
     }
 
     if (button) button.disabled = true;
-    setStatus(status, "Creating doctor account…");
+    setStatus(status, "Creating " + (ROLE_LABELS[role] || "account") + " account…");
 
     try {
-      const result = await MC.adminCreateDoctor(payload);
-      if (result && result.userId && result.accountStatus === "PENDING" && typeof MC.adminActivateUser === "function") {
-        try {
-          await MC.adminActivateUser(result.userId);
-        } catch (_) {}
+      let result;
+
+      if (role === "DOCTOR") {
+        result = await MC.adminCreateDoctor({
+          email,
+          initialPassword: password,
+          confirmPassword,
+          firstName,
+          lastName,
+          registrationNumber,
+          qualification,
+          specialisationId,
+          consultationFee,
+        });
+
+        if (result && result.userId && result.accountStatus === "PENDING" &&
+            typeof MC.adminActivateUser === "function") {
+          try {
+            await MC.adminActivateUser(result.userId);
+          } catch (_) {}
+        }
+      } else {
+        result = await MC.adminCreateUser({
+          role,
+          email,
+          password,
+          confirmPassword,
+          firstName,
+          lastName,
+        });
       }
+
       setStatus(
         status,
-        "Doctor account created for " +
-          (result && (result.email || payload.email)) +
+        (ROLE_LABELS[role] || "Account") +
+          " account created for " +
+          (result && (result.email || email)) +
           ". The account is active and ready for login."
       );
       form.reset();
+      syncCreateFormRole(form);
       void loadStaffAccounts();
       void loadAdminStats();
       void loadAuditLogs();
     } catch (error) {
-      setStatus(status, error.message || "Unable to create the doctor.", true);
+      setStatus(status, error.message || "Unable to create the account.", true);
     } finally {
       if (button) button.disabled = false;
     }
@@ -4863,6 +5028,18 @@
       return;
     }
 
+    const editUserBtn = event.target.closest("[data-edit-user]");
+    if (editUserBtn) {
+      openEditAccount(editUserBtn.getAttribute("data-edit-user"));
+      return;
+    }
+
+    const deleteUserBtn = event.target.closest("[data-delete-user]");
+    if (deleteUserBtn) {
+      openDeleteAccount(deleteUserBtn.getAttribute("data-delete-user"));
+      return;
+    }
+
     const fillLoginBtn = event.target.closest("[data-fill-login]");
     if (fillLoginBtn) {
       const [email, password] = (fillLoginBtn.getAttribute("data-fill-login") || "").split("|");
@@ -5091,11 +5268,134 @@
     });
   }
 
-  const adminCreateForm = document.querySelector("[data-admin-create-form]");
-  if (adminCreateForm) {
-    adminCreateForm.addEventListener("submit", (event) => {
+  document.querySelectorAll("[data-create-scope]").forEach((form) => {
+    syncCreateFormRole(form);
+
+    const roleSelect = form.querySelector("[data-role-select]");
+    if (roleSelect) {
+      roleSelect.addEventListener("change", () => syncCreateFormRole(form));
+    }
+
+    form.addEventListener("submit", (event) => {
       event.preventDefault();
-      void handleAdminCreateDoctor(adminCreateForm);
+      void handleCreateAccount(form);
+    });
+  });
+
+  const editAccountForm = $("edit-account-form");
+  if (editAccountForm) {
+    editAccountForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const status = editAccountForm.querySelector("[data-edit-status]");
+      const save = editAccountForm.querySelector("[data-edit-save]");
+      const role = editAccountForm.dataset.role;
+      const userId = editAccountForm.dataset.userId;
+      const doctorId = editAccountForm.dataset.doctorId;
+
+      const field = (name) => {
+        const input = editAccountForm.querySelector(`[data-edit-field="${name}"]`);
+        return input ? String(input.value || "").trim() : "";
+      };
+
+      if (save) save.disabled = true;
+      setStatus(status, "Saving changes…");
+
+      try {
+        if (role === "DOCTOR") {
+          if (!doctorId) {
+            throw new Error("This doctor has no clinical profile to edit.");
+          }
+          const firstName = field("firstName");
+          const lastName = field("lastName");
+          const registrationNumber = field("registrationNumber");
+          const specialisationId = field("specialisationId");
+          const consultationFee = Number(field("consultationFee") || 0);
+
+          if (!firstName || !lastName || !registrationNumber ||
+              !specialisationId || !(consultationFee >= 0)) {
+            throw new Error("Please fill in every required doctor field.");
+          }
+
+          await MC.adminUpdateDoctor(doctorId, {
+            firstName,
+            lastName,
+            registrationNumber,
+            qualification: field("qualification"),
+            specialisationId,
+            consultationFee,
+          });
+        } else {
+          const email = field("email");
+          if (!email) {
+            throw new Error("Please enter an email address.");
+          }
+          await MC.adminUpdateUser(userId, { email });
+        }
+
+        const dialog = $("edit-account-dialog");
+        if (dialog) dialog.close();
+        await loadStaffAccounts();
+        void loadAdminStats();
+        void loadAuditLogs();
+      } catch (error) {
+        setStatus(status, error.message || "Unable to save the account.", true);
+      } finally {
+        if (save) save.disabled = false;
+      }
+    });
+  }
+
+  const editCancel = document.querySelector("[data-edit-cancel]");
+  if (editCancel) {
+    editCancel.addEventListener("click", () => {
+      const dialog = $("edit-account-dialog");
+      if (dialog) dialog.close();
+    });
+  }
+
+  const deleteAccountForm = $("delete-account-form");
+  if (deleteAccountForm) {
+    const confirmInput = deleteAccountForm.querySelector("[data-delete-confirm]");
+    const deleteSubmit = deleteAccountForm.querySelector("[data-delete-submit]");
+
+    if (confirmInput && deleteSubmit) {
+      confirmInput.addEventListener("input", () => {
+        deleteSubmit.disabled = confirmInput.value.trim() !== "DELETE";
+      });
+    }
+
+    deleteAccountForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const status = deleteAccountForm.querySelector("[data-delete-status]");
+      const userId = deleteAccountForm.dataset.userId;
+
+      if (!confirmInput || confirmInput.value.trim() !== "DELETE") {
+        setStatus(status, "Type DELETE exactly to confirm.", true);
+        return;
+      }
+
+      if (deleteSubmit) deleteSubmit.disabled = true;
+      setStatus(status, "Deleting account…");
+
+      try {
+        await MC.adminDeleteUser(userId);
+        const dialog = $("delete-account-dialog");
+        if (dialog) dialog.close();
+        await loadStaffAccounts();
+        void loadAdminStats();
+        void loadAuditLogs();
+      } catch (error) {
+        setStatus(status, error.message || "Unable to delete the account.", true);
+        if (deleteSubmit) deleteSubmit.disabled = false;
+      }
+    });
+  }
+
+  const deleteCancel = document.querySelector("[data-delete-cancel]");
+  if (deleteCancel) {
+    deleteCancel.addEventListener("click", () => {
+      const dialog = $("delete-account-dialog");
+      if (dialog) dialog.close();
     });
   }
 
