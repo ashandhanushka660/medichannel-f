@@ -38,7 +38,7 @@
   const HOME = {
     CUSTOMER: "index",
     DOCTOR: "doctor",
-    MANAGER: "manager-s",
+    MANAGER: "manager-d",
     ADMIN: "admin",
   };
 
@@ -135,6 +135,10 @@
     },
     queueSub: null,
     sessionsSub: null,
+    manager: {
+      reception: [],
+      receptionLoaded: false,
+    },
   };
 
   // ---------------------------------------------------------------
@@ -465,6 +469,10 @@
       void loadManagerSessionPicker();
       void loadManagerSessions();
     }
+
+    if (link.hash === "#manager-r" || link.hash === "#manager") {
+      void loadManagerReception();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -535,6 +543,10 @@
     if (active.id === "manager-s" || active.id === "manager-d") {
       void loadManagerSessionPicker();
       void loadManagerSessions();
+    }
+
+    if (active.id === "manager-r" || active.id === "manager") {
+      void loadManagerReception();
     }
   }
 
@@ -1921,6 +1933,9 @@
       await MC.pay(appointmentId, "CARD");
       setAppMessage("");
       await loadAppointments();
+      if (state.manager.receptionLoaded) {
+        await loadManagerReception({ silent: true });
+      }
     } catch (error) {
       setAppMessage(error.message);
       if (button) button.disabled = false;
@@ -1933,6 +1948,9 @@
     try {
       await MC.cancelAppointment(appointmentId);
       await Promise.allSettled([loadAppointments(), loadSessions()]);
+      if (state.manager.receptionLoaded) {
+        await loadManagerReception({ silent: true });
+      }
     } catch (error) {
       setAppMessage(error.message);
     }
@@ -4439,6 +4457,202 @@
     }
   }
 
+  async function loadManagerReception(options) {
+    const tbody = document.querySelector("[data-manager-reception-tbody]");
+    if (!tbody) return;
+
+    const settings = options || {};
+    const status = document.querySelector("[data-manager-reception-status]");
+
+    if (!settings.silent && status) {
+      status.hidden = false;
+      status.textContent = "Loading today’s appointments…";
+      status.classList.remove("text-rose-600");
+    }
+
+    try {
+      const list = await MC.adminAppointments();
+      const today = todayISO();
+      state.manager.reception = (Array.isArray(list) ? list : []).filter(
+        (appointment) => appointment.sessionDate === today
+      );
+      state.manager.receptionLoaded = true;
+      renderManagerReception();
+      if (status) {
+        if (state.manager.reception.length === 0) {
+          status.hidden = false;
+          status.textContent = "No appointments are booked for today yet.";
+        } else {
+          status.hidden = true;
+        }
+      }
+    } catch (error) {
+      console.warn("Could not load reception appointments:", error);
+      tbody.innerHTML =
+        '<tr><td colspan="6" class="text-center py-4 text-rose-600">Could not load today’s appointments: ' +
+        escapeHtml(error.message || "Unknown error") +
+        "</td></tr>";
+      if (status) {
+        status.hidden = false;
+        status.textContent = "Reception could not be loaded. Try again in a moment.";
+      }
+    }
+  }
+
+  function managerReceptionMatches(appointment, term) {
+    if (!term) return true;
+    const needle = term.trim().toLowerCase();
+    if (!needle) return true;
+    return [
+      appointment.bookingReference,
+      referenceOf(appointment.bookingReference),
+      appointment.appointmentNumber != null ? "#" + appointment.appointmentNumber : "",
+      appointment.patientName,
+      appointment.doctorName,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle));
+  }
+
+  function paymentLabel(appointment) {
+    const status = appointment.paymentStatus || "PENDING";
+    if (status === "PAID") {
+      return appointment.paymentMethod
+        ? "Paid · " + titleCase(appointment.paymentMethod)
+        : "Paid";
+    }
+    if (status === "REFUNDED") return "Refunded";
+    return "Pending";
+  }
+
+  function renderManagerReception() {
+    const tbody = document.querySelector("[data-manager-reception-tbody]");
+    if (!tbody) return;
+
+    const search = document.querySelector("#manager-f");
+    const term = search ? search.value : "";
+    const list = state.manager.reception.filter((appointment) =>
+      managerReceptionMatches(appointment, term)
+    );
+
+    if (list.length === 0) {
+      const tr = document.createElement("tr");
+      const td = el(
+        "td",
+        "text-center py-4 text-mute",
+        state.manager.reception.length === 0
+          ? "No appointments are booked for today."
+          : "No appointments match your search."
+      );
+      td.colSpan = 6;
+      tr.append(td);
+      tbody.replaceChildren(tr);
+      return;
+    }
+
+    tbody.replaceChildren();
+    list.forEach((appointment) => {
+      const tr = document.createElement("tr");
+      const reference = referenceOf(appointment.bookingReference);
+      const status = appointment.status || "BOOKED";
+      const canCancel = status === "BOOKED" || status === "ARRIVED";
+
+      const tdRef = el("td", "text-xs font-mono text-slate2", reference);
+      tdRef.dataset.label = "Ref";
+
+      const tdPatient = document.createElement("td");
+      tdPatient.dataset.label = "Patient";
+      tdPatient.append(
+        el("div", "font-semibold text-ink", appointment.patientName || "Patient")
+      );
+      tdPatient.append(
+        el("div", "text-xs text-mute", appointment.doctorName || "Doctor")
+      );
+
+      const tdNumber = el(
+        "td",
+        "",
+        appointment.appointmentNumber != null
+          ? "#" + appointment.appointmentNumber
+          : "—"
+      );
+      tdNumber.dataset.label = "No.";
+
+      const tdStatus = document.createElement("td");
+      tdStatus.dataset.label = "Status";
+      tdStatus.append(appointmentBadge(status));
+
+      const tdPayment = el("td", "text-sm text-slate2", paymentLabel(appointment));
+      tdPayment.dataset.label = "Payment";
+
+      const tdActions = document.createElement("td");
+      tdActions.dataset.label = "Actions";
+      const actions = document.createElement("div");
+      actions.className = "flex flex-wrap items-center gap-1.5";
+
+      if (status === "BOOKED") {
+        const arrive = el(
+          "button",
+          "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+          "Mark arrived"
+        );
+        arrive.type = "button";
+        arrive.dataset.arriveAppointment = appointment.appointmentId;
+        actions.append(arrive);
+      }
+
+      if (appointment.paymentStatus !== "PAID" && status !== "CANCELLED") {
+        const pay = el(
+          "button",
+          "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+          "Record payment"
+        );
+        pay.type = "button";
+        pay.dataset.payAppointment = appointment.appointmentId;
+        actions.append(pay);
+      }
+
+      if (canCancel) {
+        const cancel = el(
+          "button",
+          "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+          "Cancel"
+        );
+        cancel.type = "button";
+        cancel.dataset.cancelAppointment = appointment.appointmentId;
+        actions.append(cancel);
+      }
+
+      if (!actions.childElementCount) {
+        actions.append(el("span", "text-xs text-mute", "—"));
+      }
+
+      tdActions.append(actions);
+      tr.append(tdRef, tdPatient, tdNumber, tdStatus, tdPayment, tdActions);
+      tbody.append(tr);
+    });
+  }
+
+  async function markManagerArrived(appointmentId, button) {
+    if (!appointmentId) return;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Marking…";
+    }
+
+    try {
+      await MC.markAppointmentArrived(appointmentId);
+      await loadManagerReception({ silent: true });
+    } catch (error) {
+      setAppMessage(error.message);
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Mark arrived";
+      }
+    }
+  }
+
   async function handleManagerCreateSession(form) {
     const status = form.querySelector("[data-create-session-status]");
     const button = form.querySelector("button[type=submit]");
@@ -4851,6 +5065,11 @@
       chk(target);
     }
 
+    if (target.id === "manager-f") {
+      renderManagerReception();
+      return;
+    }
+
     if (target.id === "register-pw") {
       const score = [
         target.value.length >= 8,
@@ -5129,6 +5348,12 @@
     const cancel = event.target.closest("[data-cancel-appointment]");
     if (cancel) {
       void cancelAppointment(cancel.dataset.cancelAppointment);
+      return;
+    }
+
+    const arrive = event.target.closest("[data-arrive-appointment]");
+    if (arrive) {
+      void markManagerArrived(arrive.dataset.arriveAppointment, arrive);
       return;
     }
 

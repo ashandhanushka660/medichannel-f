@@ -290,6 +290,19 @@
       return request("admin/stats");
     },
 
+    adminAppointments(params) {
+      return request("admin/appointments" + query(params));
+    },
+
+    markAppointmentArrived(appointmentId) {
+      return request(
+        "admin/appointments/" +
+          encodeURIComponent(appointmentId) +
+          "/arrive",
+        { method: "PATCH", body: {} }
+      );
+    },
+
     adminActivateUser(userId) {
       return request(
         "admin/users/" + encodeURIComponent(userId) + "/activate",
