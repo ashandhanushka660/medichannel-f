@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from "next/server";
+import { readAuthToken } from "@/lib/auth-cookie";
+import { rejectCrossOriginMutation } from "@/lib/request-security";
+import { getBackendUrl } from "@/lib/backend-url";
+
+type RouteContext = {
+  params: Promise<{ path: string[] }>;
+};
+
+async function forwardRequest(
+  request: NextRequest,
+  context: RouteContext
+) {
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const rejection = rejectCrossOriginMutation(request);
+    if (rejection) return rejection;
+  }
+
+  const apiUrl = getBackendUrl();
+  const { path } = await context.params;
+  const targetUrl = `${apiUrl}/api/v1/${path.join("/")}${request.nextUrl.search}`;
+
+  const headers = new Headers();
+  const incomingAuth = request.headers.get("authorization");
+  const token = (incomingAuth && incomingAuth.startsWith("Bearer "))
+    ? incomingAuth.substring(7).trim()
+    : readAuthToken(request);
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const contentType = request.headers.get("content-type");
+  if (contentType) headers.set("Content-Type", contentType);
+
+  const method = request.method;
+  const body =
+    method === "GET" || method === "HEAD"
+      ? undefined
+      : await request.text();
+
+  try {
+    const backendResponse = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    const responseBody = await backendResponse.text();
+
+    return new NextResponse(responseBody, {
+      status: backendResponse.status,
+      headers: {
+        "Content-Type":
+          backendResponse.headers.get("content-type") ||
+          "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      { message: "Unable to connect to the MediChannel backend." },
+      { status: 502 }
+    );
+  }
+}
+
+export const GET = forwardRequest;
+export const POST = forwardRequest;
+export const PUT = forwardRequest;
+export const PATCH = forwardRequest;
+export const DELETE = forwardRequest;
