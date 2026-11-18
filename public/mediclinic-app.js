@@ -277,9 +277,18 @@
   // Global messages, wake-up handling
   // ---------------------------------------------------------------
 
-  function setAppMessage(message) {
+  function setAppMessage(message, tone) {
     const notice = $("app-session-warning");
     if (!notice) return;
+    const styles = {
+      warning:
+        "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg",
+      success:
+        "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-lg",
+      error:
+        "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-lg",
+    };
+    notice.className = styles[tone] || styles.warning;
     notice.textContent = message || "";
     notice.hidden = !message;
   }
@@ -2148,30 +2157,20 @@
         );
       }
 
-      if (appointment.status === "BOOKED") {
-        if (appointment.paymentStatus === "PENDING" && canCancel(appointment)) {
-          actions.append(
-            actionButton(
-              "Cancel",
-              "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
-              "cancel-appointment",
-              appointment.appointmentId
-            )
-          );
-        } else if (appointment.paymentStatus === "PAID") {
-          actions.append(
-            el("span", "text-[11px] text-mute block leading-tight", "Paid (non-refundable)")
-          );
-        } else if (!canCancel(appointment)) {
-          actions.append(
-            el("span", "text-[11px] text-mute block leading-tight", "Cancel closed (BR-07)")
-          );
-        }
+      if (appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
+        actions.append(
+          el("span", "text-[11px] text-mute block leading-tight", "Paid (non-refundable)")
+        );
       }
 
-      if (!actions.childNodes.length) {
-        actions.append(document.createTextNode("—"));
-      }
+      actions.append(
+        actionButton(
+          "Cancel",
+          "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+          "cancel-appointment",
+          appointment.appointmentId
+        )
+      );
 
       row.append(actions);
       tbody.append(row);
@@ -2435,8 +2434,9 @@
       if (state.manager.receptionLoaded) {
         await loadManagerReception({ silent: true });
       }
+      setAppMessage("Your appointment is cancelled successfully.", "success");
     } catch (error) {
-      setAppMessage(error.message);
+      setAppMessage(error.message, "error");
     }
   }
 
@@ -6573,6 +6573,11 @@
 
     if (event.target.closest("[data-doctor-refresh]")) {
       void loadDoctorQueue(state.doctor.sessionId);
+      return;
+    }
+
+    if (event.target.closest("[data-appointments-refresh]")) {
+      void loadAppointments();
       return;
     }
 
