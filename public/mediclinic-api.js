@@ -40,6 +40,25 @@
     return fallback || "The request could not be completed.";
   }
 
+  // Reads a response body once, tolerating empty and non-JSON replies.
+  async function readBody(response) {
+    const text = await response.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  }
+
+  function errorFromResponse(response, body) {
+    return new MediChannelError(
+      friendlyMessage(response.status, body),
+      response.status,
+      body
+    );
+  }
+
   async function request(path, options) {
     const settings = Object.assign(
       { method: "GET", credentials: "same-origin", cache: "no-store" },
@@ -83,23 +102,10 @@
       throw offline;
     }
 
-    const text = await response.text();
-    let body = null;
-
-    if (text) {
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = text;
-      }
-    }
+    const body = await readBody(response);
 
     if (!response.ok) {
-      throw new MediChannelError(
-        friendlyMessage(response.status, body),
-        response.status,
-        body
-      );
+      throw errorFromResponse(response, body);
     }
 
     return body;
@@ -140,14 +146,10 @@
 
       if (response.status === 401) return null;
 
-      const body = await response.json().catch(() => null);
+      const body = await readBody(response);
 
       if (!response.ok) {
-        throw new MediChannelError(
-          friendlyMessage(response.status, body),
-          response.status,
-          body
-        );
+        throw errorFromResponse(response, body);
       }
 
       return body;
@@ -223,8 +225,16 @@
       return request("audit-logs");
     },
 
+    // Reports ---------------------------------------------------------
+    // Authoritative dashboard figures. Pass { from, to } to scope the
+    // aggregates to a single day instead of the backend's 30-day default.
+    reportOverview(filters) {
+      return request("reports/overview" + query(filters));
+    },
+
+    // Notices ---------------------------------------------------------
     managerNotices() {
-      return request("manager/notices");
+      return request("notices/manage");
     },
 
     createNotice(payload) {
@@ -234,21 +244,22 @@
       });
     },
 
-    managerReviews() {
-      return request("feedback/moderation");
+    // Feedback moderation ---------------------------------------------
+    managerReviews(status) {
+      return request("reviews/manage" + query({ status }));
     },
 
     approveReview(reviewId) {
       return request(
-        "feedback/moderation/" + encodeURIComponent(reviewId),
-        { method: "PATCH", body: { status: "APPROVED" } }
+        "reviews/" + encodeURIComponent(reviewId) + "/approve",
+        { method: "PATCH" }
       );
     },
 
     hideReview(reviewId) {
       return request(
-        "feedback/moderation/" + encodeURIComponent(reviewId),
-        { method: "PATCH", body: { status: "HIDDEN" } }
+        "reviews/" + encodeURIComponent(reviewId) + "/hide",
+        { method: "PATCH" }
       );
     },
 
