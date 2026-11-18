@@ -475,6 +475,7 @@
     }
 
     if (link.hash === "#manager-x") {
+      void loadManagerNotices();
       void loadManagerReviews();
     }
   }
@@ -554,6 +555,7 @@
     }
 
     if (active.id === "manager-x") {
+      void loadManagerNotices();
       void loadManagerReviews();
     }
   }
@@ -4538,6 +4540,121 @@
     return card;
   }
 
+  function renderManagerNotice(notice) {
+    const card = el(
+      "article",
+      "grid gap-2 rounded-lg border border-line bg-white p-3 sm:p-4"
+    );
+    const header = el("div", "flex flex-wrap items-center justify-between gap-2");
+    header.append(el("h3", "font-semibold text-ink", notice.title || "Untitled notice"));
+    header.append(
+      badge(notice.published ? "Published" : "Draft", notice.published ? "green" : "slate")
+    );
+    card.append(header);
+    card.append(
+      el("p", "text-sm text-slate2 whitespace-pre-wrap break-words", notice.body || "")
+    );
+    if (notice.createdAt) {
+      const created = el(
+        "time",
+        "text-xs text-mute",
+        "Created " + formatDateTime(notice.createdAt)
+      );
+      if (typeof notice.createdAt === "string") {
+        created.dateTime = notice.createdAt;
+      }
+      card.append(created);
+    }
+    return card;
+  }
+
+  async function loadManagerNotices(options) {
+    const container = document.querySelector("[data-manager-notices]");
+    const status = document.querySelector("[data-manager-notices-status]");
+    if (!container || !status) return false;
+
+    const settings = options || {};
+    container.replaceChildren();
+    setStatus(status, "Loading notices…");
+
+    try {
+      const notices = await MC.managerNotices();
+      if (!Array.isArray(notices)) {
+        throw new Error("The notice service returned an invalid response.");
+      }
+
+      if (notices.length === 0) {
+        setStatus(
+          status,
+          settings.successMessage
+            ? settings.successMessage + " No notices have been created."
+            : "No notices have been created."
+        );
+        return true;
+      }
+
+      container.replaceChildren(...notices.map(renderManagerNotice));
+      setStatus(
+        status,
+        settings.successMessage || "Showing " + notices.length + " notices."
+      );
+      return true;
+    } catch (error) {
+      console.warn("Could not load manager notices:", error);
+      setStatus(
+        status,
+        "Could not load notices: " + (error.message || "Unknown error"),
+        true
+      );
+      return false;
+    }
+  }
+
+  async function publishManagerNotice(form) {
+    const status = document.querySelector("[data-manager-notice-status]");
+    const submit = form.querySelector('button[type="submit"]');
+    const title = String(form.elements.title.value || "").trim();
+    const body = String(form.elements.body.value || "").trim();
+
+    if (!title || !body) {
+      setStatus(status, "Enter a title and notice body before publishing.", true);
+      return;
+    }
+
+    if (submit) submit.disabled = true;
+    setStatus(status, "Publishing notice…");
+
+    try {
+      await MC.createNotice({ title, body, published: true });
+      form.reset();
+      form.hidden = true;
+      const toggle = document.querySelector("[data-manager-notice-toggle]");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+
+      const refreshed = await loadManagerNotices({
+        successMessage: "Notice published successfully.",
+      });
+      if (!refreshed) {
+        setStatus(
+          status,
+          "Notice published successfully, but the notice list could not be refreshed.",
+          true
+        );
+      } else {
+        setStatus(status, "Notice published successfully.");
+      }
+    } catch (error) {
+      console.warn("Could not publish manager notice:", error);
+      setStatus(
+        status,
+        "Could not publish notice: " + (error.message || "Unknown error"),
+        true
+      );
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  }
+
   async function loadManagerReviews(options) {
     const container = document.querySelector("[data-manager-reviews]");
     const status = document.querySelector("[data-manager-reviews-status]");
@@ -5476,6 +5593,29 @@
       return;
     }
 
+    const noticeToggle = event.target.closest("[data-manager-notice-toggle]");
+    if (noticeToggle) {
+      const form = document.querySelector("[data-manager-notice-form]");
+      if (form) {
+        form.hidden = !form.hidden;
+        noticeToggle.setAttribute("aria-expanded", String(!form.hidden));
+        if (!form.hidden) {
+          const title = form.elements.title;
+          if (title) title.focus();
+        }
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-manager-notice-cancel]")) {
+      const form = document.querySelector("[data-manager-notice-form]");
+      if (form) form.hidden = true;
+      const toggle = document.querySelector("[data-manager-notice-toggle]");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      setStatus(document.querySelector("[data-manager-notice-status]"), "");
+      return;
+    }
+
     const book = event.target.closest("[data-book-session]");
     if (book) {
       const session = state.sessions.find(
@@ -5815,6 +5955,14 @@
     managerCreateSessionForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void handleManagerCreateSession(managerCreateSessionForm);
+    });
+  }
+
+  const managerNoticeForm = document.querySelector("[data-manager-notice-form]");
+  if (managerNoticeForm) {
+    managerNoticeForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void publishManagerNotice(managerNoticeForm);
     });
   }
 

@@ -223,6 +223,17 @@
       return request("audit-logs");
     },
 
+    managerNotices() {
+      return request("notices/manage");
+    },
+
+    createNotice(payload) {
+      return request("notices", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
     managerReviews() {
       return request("reviews/manage");
     },
