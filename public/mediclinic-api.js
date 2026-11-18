@@ -223,6 +223,35 @@
       return request("audit-logs");
     },
 
+    managerNotices() {
+      return request("manager/notices");
+    },
+
+    createNotice(payload) {
+      return request("notices", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
+    managerReviews() {
+      return request("feedback/moderation");
+    },
+
+    approveReview(reviewId) {
+      return request(
+        "feedback/moderation/" + encodeURIComponent(reviewId),
+        { method: "PATCH", body: { status: "APPROVED" } }
+      );
+    },
+
+    hideReview(reviewId) {
+      return request(
+        "feedback/moderation/" + encodeURIComponent(reviewId),
+        { method: "PATCH", body: { status: "HIDDEN" } }
+      );
+    },
+
     sessionQueue(sessionId) {
       return request(
         "sessions/" + encodeURIComponent(sessionId) + "/queue"

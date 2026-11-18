@@ -473,6 +473,11 @@
     if (link.hash === "#manager-r" || link.hash === "#manager") {
       void loadManagerReception();
     }
+
+    if (link.hash === "#manager-x") {
+      void loadManagerNotices();
+      void loadManagerReviews();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -547,6 +552,11 @@
 
     if (active.id === "manager-r" || active.id === "manager") {
       void loadManagerReception();
+    }
+
+    if (active.id === "manager-x") {
+      void loadManagerNotices();
+      void loadManagerReviews();
     }
   }
 
@@ -4371,9 +4381,9 @@
       if (elDocsToday) elDocsToday.textContent = doctorsToday || "0";
       if (elDocsNow) elDocsNow.textContent = doctorsActiveNow || "0";
       if (elQueueServing) elQueueServing.textContent = liveQueueText;
-      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "112";
-      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "86 / 26";
-      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 312,500";
+      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "0";
+      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "0 / 0";
+      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 0";
 
       function renderRow(s) {
         const tr = document.createElement("tr");
@@ -4454,6 +4464,281 @@
       console.warn("Could not load manager sessions:", err);
       if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
       if (dashTbody) dashTbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+    }
+  }
+
+  function managerReviewActionButton(review, action, label) {
+    const button = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+      label
+    );
+    button.type = "button";
+    button.dataset.reviewAction = action;
+    button.dataset.reviewId = String(review.id);
+    return button;
+  }
+
+  function renderManagerReview(review) {
+    const card = el(
+      "article",
+      "grid gap-3 rounded-lg border border-line bg-white p-3 sm:p-4"
+    );
+    card.dataset.managerReview = "";
+
+    const status = typeof review.status === "string"
+      ? review.status.trim().toUpperCase()
+      : "";
+    const heading = el("div", "flex flex-wrap items-center justify-between gap-2");
+    const rating = Number(review.rating);
+    heading.append(
+      el(
+        "strong",
+        "text-sm font-semibold text-ink",
+        Number.isInteger(rating) && rating >= 1 && rating <= 5
+          ? "★ " + rating + " / 5"
+          : "Rating unavailable"
+      )
+    );
+    heading.append(
+      badge(
+        titleCase(status) || "Unknown status",
+        status === "APPROVED" ? "green" : status === "HIDDEN" ? "slate" : "orange"
+      )
+    );
+    card.append(heading);
+
+    const comment = typeof review.comment === "string" && review.comment.trim()
+      ? review.comment
+      : "No written feedback was provided.";
+    card.append(
+      el("p", "text-sm text-slate2 whitespace-pre-wrap break-words", comment)
+    );
+
+    const footer = el("div", "flex flex-wrap items-center justify-between gap-3");
+    const created = el(
+      "time",
+      "text-xs text-mute",
+      review.createdAt ? formatDateTime(review.createdAt) : "Date unavailable"
+    );
+    if (typeof review.createdAt === "string") {
+      created.dateTime = review.createdAt;
+    }
+    footer.append(created);
+
+    const actions = el("div", "flex flex-wrap gap-2");
+    if (typeof review.id === "string" && review.id) {
+      if (status !== "APPROVED") {
+        actions.append(managerReviewActionButton(review, "approve", "Approve"));
+      }
+      if (status !== "HIDDEN") {
+        actions.append(managerReviewActionButton(review, "hide", "Hide"));
+      }
+    }
+    footer.append(actions);
+    card.append(footer);
+    return card;
+  }
+
+  function renderManagerNotice(notice) {
+    const card = el(
+      "article",
+      "grid gap-2 rounded-lg border border-line bg-white p-3 sm:p-4"
+    );
+    const header = el("div", "flex flex-wrap items-center justify-between gap-2");
+    header.append(el("h3", "font-semibold text-ink", notice.title || "Untitled notice"));
+    header.append(
+      badge(notice.active ? "Published" : "Draft", notice.active ? "green" : "slate")
+    );
+    card.append(header);
+    card.append(
+      el("p", "text-sm text-slate2 whitespace-pre-wrap break-words", notice.body || "")
+    );
+    if (notice.createdAt) {
+      const created = el(
+        "time",
+        "text-xs text-mute",
+        "Created " + formatDateTime(notice.createdAt)
+      );
+      if (typeof notice.createdAt === "string") {
+        created.dateTime = notice.createdAt;
+      }
+      card.append(created);
+    }
+    return card;
+  }
+
+  async function loadManagerNotices(options) {
+    const container = document.querySelector("[data-manager-notices]");
+    const status = document.querySelector("[data-manager-notices-status]");
+    if (!container || !status) return false;
+
+    const settings = options || {};
+    container.replaceChildren();
+    setStatus(status, "Loading notices…");
+
+    try {
+      const notices = await MC.managerNotices();
+      if (!Array.isArray(notices)) {
+        throw new Error("The notice service returned an invalid response.");
+      }
+
+      if (notices.length === 0) {
+        setStatus(
+          status,
+          settings.successMessage
+            ? settings.successMessage + " No notices have been created."
+            : "No notices have been created."
+        );
+        return true;
+      }
+
+      container.replaceChildren(...notices.map(renderManagerNotice));
+      setStatus(
+        status,
+        settings.successMessage || "Showing " + notices.length + " notices."
+      );
+      return true;
+    } catch (error) {
+      console.warn("Could not load manager notices:", error);
+      setStatus(
+        status,
+        "Could not load notices: " + (error.message || "Unknown error"),
+        true
+      );
+      return false;
+    }
+  }
+
+  async function publishManagerNotice(form) {
+    const status = document.querySelector("[data-manager-notice-status]");
+    const submit = form.querySelector('button[type="submit"]');
+    const title = String(form.elements.title.value || "").trim();
+    const body = String(form.elements.body.value || "").trim();
+
+    if (!title || !body) {
+      setStatus(status, "Enter a title and notice body before publishing.", true);
+      return;
+    }
+
+    if (submit) submit.disabled = true;
+    setStatus(status, "Publishing notice…");
+
+    try {
+      await MC.createNotice({ title, body, active: true });
+      form.reset();
+      form.hidden = true;
+      const toggle = document.querySelector("[data-manager-notice-toggle]");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+
+      const refreshed = await loadManagerNotices({
+        successMessage: "Notice published successfully.",
+      });
+      if (!refreshed) {
+        setStatus(
+          status,
+          "Notice published successfully, but the notice list could not be refreshed.",
+          true
+        );
+      } else {
+        setStatus(status, "Notice published successfully.");
+      }
+    } catch (error) {
+      console.warn("Could not publish manager notice:", error);
+      setStatus(
+        status,
+        "Could not publish notice: " + (error.message || "Unknown error"),
+        true
+      );
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  }
+
+  async function loadManagerReviews(options) {
+    const container = document.querySelector("[data-manager-reviews]");
+    const status = document.querySelector("[data-manager-reviews-status]");
+    if (!container || !status) return false;
+
+    const settings = options || {};
+    container.replaceChildren();
+    setStatus(status, "Loading feedback…");
+
+    try {
+      const reviews = await MC.managerReviews();
+      if (!Array.isArray(reviews)) {
+        throw new Error("The review service returned an invalid response.");
+      }
+
+      if (reviews.length === 0) {
+        setStatus(
+          status,
+          settings.successMessage
+            ? settings.successMessage + " No feedback is currently available."
+            : "No feedback is currently available for moderation."
+        );
+        return true;
+      }
+
+      container.replaceChildren(...reviews.map(renderManagerReview));
+      setStatus(
+        status,
+        settings.successMessage || "Showing " + reviews.length + " reviews."
+      );
+      return true;
+    } catch (error) {
+      console.warn("Could not load manager feedback:", error);
+      setStatus(
+        status,
+        "Could not load feedback: " + (error.message || "Unknown error"),
+        true
+      );
+      return false;
+    }
+  }
+
+  async function moderateManagerReview(reviewId, action, button) {
+    if (!reviewId || (action !== "approve" && action !== "hide")) return;
+
+    const card = button.closest("[data-manager-review]");
+    const buttons = card ? Array.from(card.querySelectorAll("button")) : [button];
+    const status = document.querySelector("[data-manager-reviews-status]");
+    buttons.forEach((item) => {
+      item.disabled = true;
+    });
+    setStatus(
+      status,
+      action === "approve" ? "Approving feedback…" : "Hiding feedback…"
+    );
+
+    try {
+      if (action === "approve") {
+        await MC.approveReview(reviewId);
+      } else {
+        await MC.hideReview(reviewId);
+      }
+
+      const message = action === "approve"
+        ? "Feedback approved."
+        : "Feedback hidden.";
+      const refreshed = await loadManagerReviews({ successMessage: message });
+      if (!refreshed && status) {
+        setStatus(
+          status,
+          message + " The review list could not be refreshed. " + status.textContent,
+          true
+        );
+      }
+    } catch (error) {
+      console.warn("Could not moderate manager feedback:", error);
+      setStatus(
+        status,
+        "Could not " + action + " feedback: " + (error.message || "Unknown error"),
+        true
+      );
+      buttons.forEach((item) => {
+        item.disabled = false;
+      });
     }
   }
 
@@ -5308,6 +5593,29 @@
       return;
     }
 
+    const noticeToggle = event.target.closest("[data-manager-notice-toggle]");
+    if (noticeToggle) {
+      const form = document.querySelector("[data-manager-notice-form]");
+      if (form) {
+        form.hidden = !form.hidden;
+        noticeToggle.setAttribute("aria-expanded", String(!form.hidden));
+        if (!form.hidden) {
+          const title = form.elements.title;
+          if (title) title.focus();
+        }
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-manager-notice-cancel]")) {
+      const form = document.querySelector("[data-manager-notice-form]");
+      if (form) form.hidden = true;
+      const toggle = document.querySelector("[data-manager-notice-toggle]");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      setStatus(document.querySelector("[data-manager-notice-status]"), "");
+      return;
+    }
+
     const book = event.target.closest("[data-book-session]");
     if (book) {
       const session = state.sessions.find(
@@ -5354,6 +5662,16 @@
     const arrive = event.target.closest("[data-arrive-appointment]");
     if (arrive) {
       void markManagerArrived(arrive.dataset.arriveAppointment, arrive);
+      return;
+    }
+
+    const reviewAction = event.target.closest("[data-review-action]");
+    if (reviewAction) {
+      void moderateManagerReview(
+        reviewAction.dataset.reviewId,
+        reviewAction.dataset.reviewAction,
+        reviewAction
+      );
       return;
     }
 
@@ -5637,6 +5955,14 @@
     managerCreateSessionForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void handleManagerCreateSession(managerCreateSessionForm);
+    });
+  }
+
+  const managerNoticeForm = document.querySelector("[data-manager-notice-form]");
+  if (managerNoticeForm) {
+    managerNoticeForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void publishManagerNotice(managerNoticeForm);
     });
   }
 
