@@ -223,6 +223,24 @@
       return request("audit-logs");
     },
 
+    managerReviews() {
+      return request("reviews/manage");
+    },
+
+    approveReview(reviewId) {
+      return request(
+        "reviews/" + encodeURIComponent(reviewId) + "/approve",
+        { method: "PATCH" }
+      );
+    },
+
+    hideReview(reviewId) {
+      return request(
+        "reviews/" + encodeURIComponent(reviewId) + "/hide",
+        { method: "PATCH" }
+      );
+    },
+
     sessionQueue(sessionId) {
       return request(
         "sessions/" + encodeURIComponent(sessionId) + "/queue"

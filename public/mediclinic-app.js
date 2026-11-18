@@ -473,6 +473,10 @@
     if (link.hash === "#manager-r" || link.hash === "#manager") {
       void loadManagerReception();
     }
+
+    if (link.hash === "#manager-x") {
+      void loadManagerReviews();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -547,6 +551,10 @@
 
     if (active.id === "manager-r" || active.id === "manager") {
       void loadManagerReception();
+    }
+
+    if (active.id === "manager-x") {
+      void loadManagerReviews();
     }
   }
 
@@ -4457,6 +4465,166 @@
     }
   }
 
+  function managerReviewActionButton(review, action, label) {
+    const button = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+      label
+    );
+    button.type = "button";
+    button.dataset.reviewAction = action;
+    button.dataset.reviewId = String(review.reviewId);
+    return button;
+  }
+
+  function renderManagerReview(review) {
+    const card = el(
+      "article",
+      "grid gap-3 rounded-lg border border-line bg-white p-3 sm:p-4"
+    );
+    card.dataset.managerReview = "";
+
+    const status = typeof review.moderationStatus === "string"
+      ? review.moderationStatus.trim().toUpperCase()
+      : "";
+    const heading = el("div", "flex flex-wrap items-center justify-between gap-2");
+    const rating = Number(review.rating);
+    heading.append(
+      el(
+        "strong",
+        "text-sm font-semibold text-ink",
+        Number.isInteger(rating) && rating >= 1 && rating <= 5
+          ? "★ " + rating + " / 5"
+          : "Rating unavailable"
+      )
+    );
+    heading.append(
+      badge(
+        titleCase(status) || "Unknown status",
+        status === "APPROVED" ? "green" : status === "HIDDEN" ? "slate" : "orange"
+      )
+    );
+    card.append(heading);
+
+    const comment = typeof review.comment === "string" && review.comment.trim()
+      ? review.comment
+      : "No written feedback was provided.";
+    card.append(
+      el("p", "text-sm text-slate2 whitespace-pre-wrap break-words", comment)
+    );
+
+    const footer = el("div", "flex flex-wrap items-center justify-between gap-3");
+    const created = el(
+      "time",
+      "text-xs text-mute",
+      review.createdAt ? formatDateTime(review.createdAt) : "Date unavailable"
+    );
+    if (typeof review.createdAt === "string") {
+      created.dateTime = review.createdAt;
+    }
+    footer.append(created);
+
+    const actions = el("div", "flex flex-wrap gap-2");
+    if (typeof review.reviewId === "string" && review.reviewId) {
+      if (status !== "APPROVED") {
+        actions.append(managerReviewActionButton(review, "approve", "Approve"));
+      }
+      if (status !== "HIDDEN") {
+        actions.append(managerReviewActionButton(review, "hide", "Hide"));
+      }
+    }
+    footer.append(actions);
+    card.append(footer);
+    return card;
+  }
+
+  async function loadManagerReviews(options) {
+    const container = document.querySelector("[data-manager-reviews]");
+    const status = document.querySelector("[data-manager-reviews-status]");
+    if (!container || !status) return false;
+
+    const settings = options || {};
+    container.replaceChildren();
+    setStatus(status, "Loading feedback…");
+
+    try {
+      const reviews = await MC.managerReviews();
+      if (!Array.isArray(reviews)) {
+        throw new Error("The review service returned an invalid response.");
+      }
+
+      if (reviews.length === 0) {
+        setStatus(
+          status,
+          settings.successMessage
+            ? settings.successMessage + " No feedback is currently available."
+            : "No feedback is currently available for moderation."
+        );
+        return true;
+      }
+
+      container.replaceChildren(...reviews.map(renderManagerReview));
+      setStatus(
+        status,
+        settings.successMessage || "Showing " + reviews.length + " reviews."
+      );
+      return true;
+    } catch (error) {
+      console.warn("Could not load manager feedback:", error);
+      setStatus(
+        status,
+        "Could not load feedback: " + (error.message || "Unknown error"),
+        true
+      );
+      return false;
+    }
+  }
+
+  async function moderateManagerReview(reviewId, action, button) {
+    if (!reviewId || (action !== "approve" && action !== "hide")) return;
+
+    const card = button.closest("[data-manager-review]");
+    const buttons = card ? Array.from(card.querySelectorAll("button")) : [button];
+    const status = document.querySelector("[data-manager-reviews-status]");
+    buttons.forEach((item) => {
+      item.disabled = true;
+    });
+    setStatus(
+      status,
+      action === "approve" ? "Approving feedback…" : "Hiding feedback…"
+    );
+
+    try {
+      if (action === "approve") {
+        await MC.approveReview(reviewId);
+      } else {
+        await MC.hideReview(reviewId);
+      }
+
+      const message = action === "approve"
+        ? "Feedback approved."
+        : "Feedback hidden.";
+      const refreshed = await loadManagerReviews({ successMessage: message });
+      if (!refreshed && status) {
+        setStatus(
+          status,
+          message + " The review list could not be refreshed. " + status.textContent,
+          true
+        );
+      }
+    } catch (error) {
+      console.warn("Could not moderate manager feedback:", error);
+      setStatus(
+        status,
+        "Could not " + action + " feedback: " + (error.message || "Unknown error"),
+        true
+      );
+      buttons.forEach((item) => {
+        item.disabled = false;
+      });
+    }
+  }
+
   async function loadManagerReception(options) {
     const tbody = document.querySelector("[data-manager-reception-tbody]");
     if (!tbody) return;
@@ -5354,6 +5522,16 @@
     const arrive = event.target.closest("[data-arrive-appointment]");
     if (arrive) {
       void markManagerArrived(arrive.dataset.arriveAppointment, arrive);
+      return;
+    }
+
+    const reviewAction = event.target.closest("[data-review-action]");
+    if (reviewAction) {
+      void moderateManagerReview(
+        reviewAction.dataset.reviewId,
+        reviewAction.dataset.reviewAction,
+        reviewAction
+      );
       return;
     }
 
