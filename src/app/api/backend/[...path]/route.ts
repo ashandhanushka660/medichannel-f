@@ -59,9 +59,18 @@ async function forwardRequest(
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (error) {
+    const targetPath = `/api/v1/${path.join("/")}`;
+    console.error("Backend proxy request failed:", {
+      method,
+      targetPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
-      { message: "Unable to connect to the MediChannel backend." },
+      {
+        message:
+          "Unable to connect to the MediChannel backend. Ensure the backend service is running and try again.",
+      },
       { status: 502 }
     );
   }

@@ -107,11 +107,16 @@
     sessionsLoaded: false,
     sessionsLoading: false,
     sessions: [],
+    sessionQueues: {},
+    sessionQueuePoll: null,
     selectedSession: null,
     booking: null,
     appointments: [],
     appointmentsLoaded: false,
     pendingIntent: null,
+    publicNoticesLoaded: false,
+    publicNotices: [],
+    adminNotices: [],
     doctor: {
       sessions: [],
       sessionsLoaded: false,
@@ -476,13 +481,20 @@
     }
 
     if (link.hash === "#manager-x") {
-      void loadManagerNotices();
       void loadManagerReviews();
+    }
+
+    if (link.hash === "#admin-n") {
+      void loadAdminNotices();
     }
   }
 
   function initPanels(view, requestedPanel) {
     if (!view) return;
+
+    if (view.dataset.view === "admin") {
+      ensureAdminNoticesPanel();
+    }
 
     const panels = Array.from(
       view.querySelectorAll("[data-dashboard-panel]")
@@ -556,8 +568,11 @@
     }
 
     if (active.id === "manager-x") {
-      void loadManagerNotices();
       void loadManagerReviews();
+    }
+
+    if (active.id === "admin-n") {
+      void loadAdminNotices();
     }
   }
 
@@ -577,6 +592,9 @@
       if (activeView === "appointments" && state.patientPollTimer) {
         clearInterval(state.patientPollTimer);
         state.patientPollTimer = null;
+      }
+      if (activeView === "index") {
+        stopSessionQueuePolling();
       }
 
       views.forEach((item) => {
@@ -656,6 +674,7 @@
     } else if (id === "consult") {
       void loadConsultationPicker();
     } else if (id === "admin") {
+      ensureAdminNoticesPanel();
       void loadAdminSpecialisations();
       void loadStaffAccounts();
       void loadAdminRooms();
@@ -671,6 +690,12 @@
       void loadStaffAccounts();
       void loadManagerSessionPicker();
       void loadManagerSessions();
+    } else if (id === "welcome") {
+      void loadPublicNotices();
+    }
+
+    if (id === "welcome") {
+      void loadPublicNotices();
     }
 
     if (["welcome", "index", "appointments"].includes(id)) {
@@ -914,6 +939,7 @@
     const dateInput = $("index-dt");
     if (dateInput && !dateInput.value) dateInput.value = todayISO();
 
+    enhanceIndexDashboard();
     await loadSpecialisations();
 
     if (S) subscribeSessionsCatalogue();
@@ -922,6 +948,7 @@
       await loadSessions();
     } else {
       renderSessions();
+      if (activeView === "index") startSessionQueuePolling();
     }
 
     applyIntent();
@@ -1002,6 +1029,7 @@
       }
 
       renderSessions();
+      if (activeView === "index") startSessionQueuePolling();
     } catch (error) {
       state.sessionsLoaded = false;
       if (heading) heading.textContent = "Sessions unavailable";
@@ -1217,17 +1245,349 @@
     });
   }
 
+  async function refreshSessionQueues() {
+    const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+    if (!sessions.length) return;
+
+    const relevant = sessions.filter(
+      (session) => session && session.sessionId && session.status !== "CANCELLED"
+    );
+    if (!relevant.length) return;
+
+    const results = await Promise.allSettled(
+      relevant.map((session) => MC.sessionQueue(session.sessionId))
+    );
+
+    let changed = false;
+    results.forEach((result, index) => {
+      if (result.status !== "fulfilled" || !result.value) return;
+      const session = relevant[index];
+      state.sessionQueues[session.sessionId] = result.value;
+      if (result.value.remainingAppointments != null) {
+        session.remainingAppointments = result.value.remainingAppointments;
+      }
+      if (result.value.status) {
+        session.status = result.value.status;
+      }
+      changed = true;
+    });
+
+    if (changed && activeView === "index") {
+      preserveScroll(() => renderSessions());
+    }
+  }
+
+  function startSessionQueuePolling() {
+    stopSessionQueuePolling();
+    void refreshSessionQueues();
+    state.sessionQueuePoll = setInterval(() => {
+      if (activeView === "index") {
+        void refreshSessionQueues();
+      }
+    }, 15000);
+  }
+
+  function stopSessionQueuePolling() {
+    if (state.sessionQueuePoll) {
+      clearInterval(state.sessionQueuePoll);
+      state.sessionQueuePoll = null;
+    }
+  }
+
+  function samplePublicNotices() {
+    const today = todayISO();
+    return [
+      {
+        id: "sample-notice-1",
+        title: "SAMPLE NOTICE: Live queue and appointment updates",
+        body: "Demo content: Track each doctor’s session in real time on this dashboard. “Now serving” and spots left update as the clinic progresses so you can plan your arrival.",
+        published: true,
+        publishedAt: today + "T08:00:00",
+        createdByName: "Demo (sample)",
+        sample: true,
+      },
+      {
+        id: "sample-notice-2",
+        title: "SAMPLE NOTICE: Booking and check-in reminder",
+        body: "Demo content: Arrive 10–15 minutes before your estimated time for physical visits. Online consultations open from your appointments when the doctor starts the session.",
+        published: true,
+        publishedAt: today + "T08:15:00",
+        createdByName: "Demo (sample)",
+        sample: true,
+      },
+      {
+        id: "sample-notice-3",
+        title: "SAMPLE NOTICE: Emergency and support",
+        body: "Demo content: For medical emergencies call 1990 immediately. For appointment or payment assistance, contact hospital reception during OPD hours.",
+        published: true,
+        publishedAt: today + "T08:30:00",
+        createdByName: "Demo (sample)",
+        sample: true,
+      },
+    ];
+  }
+
+  function enhanceIndexDashboard() {
+    const indexView = views.find((item) => item.dataset.view === "index");
+    if (!indexView) return;
+
+    const main = indexView.querySelector("main");
+    const searchForm = indexView.querySelector('form[aria-label="Search sessions"]');
+    let contentGrid = searchForm ? searchForm.nextElementSibling : null;
+    const sessionsSection = indexView.querySelector('[aria-label="Sessions"]');
+    const bookingAside = indexView.querySelector('[aria-label="Book session"]');
+    const sessionList = indexView.querySelector("[data-session-list]");
+    if (!main || !searchForm || !contentGrid || !sessionsSection || !bookingAside || !sessionList) return;
+
+    // Remove notices panel from index/dashboard if present (notices live on welcome page)
+    const existingNotices = indexView.querySelector("#public-notices-panel");
+    if (existingNotices && existingNotices.parentNode) {
+      existingNotices.parentNode.removeChild(existingNotices);
+    }
+    if (contentGrid && contentGrid.id === "public-notices-panel") {
+      contentGrid = searchForm.nextElementSibling;
+    }
+    if (!contentGrid) return;
+
+    // Normalize legacy dashboard structure (left notices column / wrappers)
+    const legacyLeft = contentGrid.querySelector("[data-dashboard-left]");
+    const legacyRight = contentGrid.querySelector("[data-dashboard-right]");
+    if (legacyLeft || legacyRight) {
+      if (legacyRight) {
+        Array.from(legacyRight.children).forEach((child) => {
+          contentGrid.append(child);
+        });
+      }
+      if (legacyLeft) legacyLeft.remove();
+      if (legacyRight) legacyRight.remove();
+    }
+    const legacyRow = contentGrid.querySelector("[data-booking-row]");
+    if (legacyRow) {
+      if (bookingAside.parentNode === legacyRow) contentGrid.append(bookingAside);
+      legacyRow.remove();
+    }
+
+    // Full-size dashboard layout: doctors/sessions and booking occupy the available space
+    main.className = "grid gap-5 max-w-[1440px] mx-auto p-4 md:p-6 lg:p-8";
+    searchForm.className =
+      "bg-white/95 backdrop-blur border border-line rounded-2xl p-4 sm:p-6 shadow-sm grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 overflow-hidden";
+
+    contentGrid.className = "grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(380px,1fr)] items-start";
+
+    sessionsSection.className =
+      "grid gap-4 rounded-2xl border border-line bg-white/80 p-4 sm:p-5 shadow-sm";
+    sessionList.className = "grid gap-4 grid-cols-1 min-h-[320px]";
+
+    bookingAside.className =
+      "bg-white border border-brand/15 rounded-2xl p-4 sm:p-6 shadow-lg grid gap-4 overflow-hidden w-full xl:sticky xl:top-24";
+
+    if (sessionsSection.parentNode !== contentGrid) contentGrid.append(sessionsSection);
+    if (bookingAside.parentNode !== contentGrid) contentGrid.append(bookingAside);
+    contentGrid.append(sessionsSection, bookingAside);
+  }
+
+  function ensurePublicNoticesPanel() {
+    let panel = document.getElementById("public-notices-panel");
+
+    const welcomeView = views.find((item) => item.dataset.view === "welcome");
+    if (!welcomeView) return panel || null;
+
+    const container =
+      welcomeView.querySelector("main > div.max-w-\\[1360px\\]") ||
+      welcomeView.querySelector("main > div.relative") ||
+      welcomeView.querySelector("main > div");
+
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = "public-notices-panel";
+      panel.className =
+        "grid gap-4 rounded-3xl border border-brand/20 bg-white/95 p-5 sm:p-7 shadow-lg";
+      panel.setAttribute("aria-label", "Hospital notices");
+
+      const header = el("div", "flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between");
+      const titleWrap = el("div", "grid gap-2");
+      titleWrap.append(
+        el("p", "text-sm font-semibold uppercase tracking-[0.18em] text-brand", "Hospital updates"),
+        el("h2", "text-3xl sm:text-4xl font-bold text-ink", "Notices & announcements"),
+        el("p", "text-base sm:text-lg text-slate2", "Published by hospital administration for patients and visitors.")
+      );
+      header.append(titleWrap);
+
+      const status = el("p", "text-base sm:text-lg text-slate2", "Loading notices…");
+      status.dataset.publicNoticesStatus = "";
+      status.setAttribute("role", "status");
+      const list = el("div", "grid gap-4 sm:grid-cols-2");
+      list.dataset.publicNoticesList = "";
+
+      panel.append(header, status, list);
+    } else {
+      panel.className =
+        "grid gap-5 rounded-3xl border border-brand/20 bg-white/95 p-5 sm:p-7 shadow-lg";
+      panel.hidden = false;
+      panel.style.display = "";
+      const list = panel.querySelector("[data-public-notices-list]");
+      if (list) list.className = "grid gap-4 sm:grid-cols-2";
+    }
+
+    // Place notices prominently on the welcome page (before "How it works")
+    if (container) {
+      const howItWorksHeading = Array.from(container.querySelectorAll("h2")).find(
+        (h) => (h.textContent || "").trim().toLowerCase() === "how it works"
+      );
+      const howItWorksAnchor = howItWorksHeading
+        ? howItWorksHeading.closest("div.text-center") || howItWorksHeading.parentElement
+        : null;
+      const hero = container.children[0] || null;
+      const queueCard = container.querySelector("[data-patient-queue-card]");
+      const statsGrid = container.querySelector(".grid.grid-cols-3.rounded-2xl");
+      let anchor = null;
+      if (howItWorksAnchor && howItWorksAnchor.parentNode === container) {
+        anchor = howItWorksAnchor;
+      } else if (statsGrid && statsGrid.nextSibling) {
+        anchor = statsGrid.nextSibling;
+      }
+
+      if (anchor) {
+        if (panel.parentNode !== container || panel.nextSibling !== anchor) {
+          container.insertBefore(panel, anchor);
+        }
+      } else if (queueCard && queueCard.nextSibling && queueCard.parentNode === container) {
+        if (panel.parentNode !== container) container.insertBefore(panel, queueCard.nextSibling);
+      } else if (hero && hero.nextSibling && hero.parentNode === container) {
+        if (panel.parentNode !== container) container.insertBefore(panel, hero.nextSibling);
+      } else if (panel.parentNode !== container) {
+        container.prepend(panel);
+      }
+    }
+
+    return panel;
+  }
+
+  function isHiddenPublicNotice(notice) {
+    if (!notice) return true;
+    const title = String(notice.title || "");
+    const body = String(notice.body || "");
+    const text = title + "\n" + body;
+    // Hide obvious spam/junk floods (long runs of the same character), while
+    // avoiding overly broad rules that could suppress legitimate notices.
+    return /([A-Za-z0-9])\1{29,}/.test(text);
+  }
+
+  function renderPublicNotices(notices) {
+    const panel = ensurePublicNoticesPanel();
+    if (!panel) return;
+
+    const status = panel.querySelector("[data-public-notices-status]");
+    const list = panel.querySelector("[data-public-notices-list]");
+    if (!list) return;
+
+    list.className = "grid gap-4 sm:grid-cols-2";
+    list.replaceChildren();
+
+    let published = (Array.isArray(notices) ? notices : []).filter(
+      (notice) => notice && notice.published !== false && !isHiddenPublicNotice(notice)
+    );
+    let usingSample = false;
+    if (!published.length) {
+      published = samplePublicNotices();
+      usingSample = true;
+    }
+
+    if (status) {
+      status.hidden = false;
+      status.className = "text-base sm:text-lg " + (usingSample ? "text-amber-800" : "text-slate2");
+      status.textContent = usingSample
+        ? "Showing SAMPLE NOTICES (demo content). Real published notices from hospital administration will appear here when available."
+        : "Latest notices published by hospital administration.";
+    }
+
+    published.forEach((notice, index) => {
+      const isSampleNotice = usingSample || Boolean(notice && notice.sample);
+      const accents = [
+        "border-sky-200 bg-white",
+        "border-emerald-200 bg-white",
+        "border-amber-200 bg-white",
+      ];
+      const sampleAccent = "border-amber-300 bg-amber-50/40";
+      const card = el(
+        "article",
+        "rounded-xl border p-5 sm:p-6 shadow-sm grid gap-3 content-start " +
+          (isSampleNotice ? sampleAccent : accents[index % accents.length] || "border-line bg-white")
+      );
+
+      const top = el("div", "flex items-start justify-between gap-3");
+      top.append(
+        el(
+          "span",
+          "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide border " +
+            (isSampleNotice
+              ? "bg-amber-100 text-amber-900 border-amber-300"
+              : "bg-snow text-brand border-brand/10"),
+          isSampleNotice ? "SAMPLE NOTICE" : "Published notice"
+        ),
+        el(
+          "span",
+          "text-xs sm:text-sm font-semibold " + (isSampleNotice ? "text-amber-800" : "text-slate2"),
+          isSampleNotice ? "Demo" : notice.publishedAt || notice.createdAt ? formatDate(notice.publishedAt || notice.createdAt) : "Today"
+        )
+      );
+      card.append(top);
+
+      card.append(
+        el("h3", "font-semibold text-ink text-lg sm:text-xl leading-snug", notice.title || "Hospital notice")
+      );
+      if (notice.body) {
+        card.append(
+          el(
+            "p",
+            "text-base sm:text-lg text-slate2 whitespace-pre-wrap break-words leading-7",
+            notice.body
+          )
+        );
+      }
+
+      const metaParts = [];
+      if (notice.publishedAt) metaParts.push("Published " + formatDateTime(notice.publishedAt));
+      else if (notice.createdAt) metaParts.push("Posted " + formatDateTime(notice.createdAt));
+      if (notice.createdByName) metaParts.push(String(notice.createdByName));
+      if (metaParts.length) {
+        card.append(el("p", "text-sm text-mute pt-2 border-t border-line/70", metaParts.join(" · ")));
+      }
+      list.append(card);
+    });
+  }
+
+  async function loadPublicNotices(options) {
+    const settings = options || {};
+    if (state.publicNoticesLoaded && !settings.force) {
+      renderPublicNotices(state.publicNotices);
+      return;
+    }
+
+    try {
+      const notices = await MC.notices();
+      state.publicNotices = Array.isArray(notices) ? notices : [];
+      state.publicNoticesLoaded = true;
+      renderPublicNotices(state.publicNotices);
+    } catch (error) {
+      state.publicNotices = [];
+      state.publicNoticesLoaded = true;
+      renderPublicNotices([]);
+    }
+  }
+
   function renderSessionCard(session) {
     const card = el(
       "article",
       "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm [&>h2]:mb-3 grid gap-4"
     );
+    card.dataset.sessionCard = session.sessionId;
 
     const header = el(
       "div",
-      "flex flex-wrap items-center gap-3 justify-between"
+      "flex flex-wrap items-start gap-3 justify-between"
     );
-    const names = el("div");
+    const names = el("div", "min-w-0");
     names.append(el("h2", "", doctorName(session)));
     names.append(
       el(
@@ -1241,16 +1601,14 @@
         ].join(" · ")
       )
     );
-    header.append(
-      names,
-      badge(
-        session.consultationType === "ONLINE" ? "Online" : "Physical",
-        "blue"
-      ),
-      badge(
-        session.status === "OPEN" ? "Available" : session.status === "IN_PROGRESS" ? "In progress" : session.status === "COMPLETED" ? "Completed" : session.status === "CANCELLED" ? "Cancelled" : "Not available",
-        session.status === "OPEN" ? "green" : session.status === "IN_PROGRESS" ? "orange" : "slate"
-      )
+
+    const typeBadge = badge(
+      session.consultationType === "ONLINE" ? "Online" : "Physical",
+      "blue"
+    );
+    const statusBadge = badge(
+      session.status === "OPEN" ? "Available" : session.status === "IN_PROGRESS" ? "In progress" : session.status === "COMPLETED" ? "Completed" : session.status === "CANCELLED" ? "Cancelled" : "Not available",
+      session.status === "OPEN" ? "green" : session.status === "IN_PROGRESS" ? "orange" : "slate"
     );
 
     const meta = el("div", "flex flex-wrap items-center gap-3");
@@ -1264,21 +1622,79 @@
       el("b", "", money(session.feeLkr))
     );
 
-    const remaining = Math.max(0, Number(session.remainingAppointments) || 0);
-    const capacity = Math.max(1, Number(session.maxAppointments) || 1);
-    const percent = Math.round((remaining / capacity) * 100);
+    const queue = state.sessionQueues[session.sessionId] || null;
+    const liveRemaining = queue && queue.remainingAppointments != null
+      ? Math.max(0, Number(queue.remainingAppointments) || 0)
+      : Math.max(0, Number(session.remainingAppointments) || 0);
+    const liveCapacity = queue && queue.maxAppointments != null
+      ? Math.max(1, Number(queue.maxAppointments) || 1)
+      : Math.max(1, Number(session.maxAppointments) || 1);
+    const percent = Math.round((liveRemaining / liveCapacity) * 100);
+
+    const queueWrap = el("div", "flex flex-col items-start gap-1.5 text-sm");
+    queueWrap.dataset.sessionQueueInfo = "";
+    const nowServing = queue && queue.nowServing != null ? Number(queue.nowServing) : null;
+    const nextNumber = queue && queue.nextNumber != null ? Number(queue.nextNumber) : null;
+    const hasNowServing = nowServing != null && Number.isFinite(nowServing) && nowServing > 0;
+    const hasNextNumber = nextNumber != null && Number.isFinite(nextNumber) && nextNumber > 0;
+
+    if (session.status === "COMPLETED") {
+      queueWrap.append(
+        el("span", "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200", "Session completed")
+      );
+    } else if (session.status === "CANCELLED") {
+      queueWrap.append(
+        el("span", "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200", "Session cancelled")
+      );
+    } else if (hasNowServing) {
+      const pill = el(
+        "span",
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300"
+      );
+      const dot = el("span", "w-2 h-2 rounded-full bg-amber-500 animate-pulse", "");
+      dot.setAttribute("aria-hidden", "true");
+      pill.append(dot, document.createTextNode("Now serving #" + nowServing));
+      queueWrap.append(pill);
+      if (hasNextNumber && nextNumber !== nowServing) {
+        queueWrap.append(
+          el("span", "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200", "Next #" + nextNumber)
+        );
+      }
+    } else if (session.status === "IN_PROGRESS") {
+      queueWrap.append(
+        el("span", "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200", hasNextNumber ? "In progress · Next #" + nextNumber : "Queue in progress")
+      );
+    } else if (session.status === "OPEN" || session.status === "SCHEDULED") {
+      queueWrap.append(
+        el("span", "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200", hasNextNumber ? "Next queue #" + nextNumber : "Queue not started")
+      );
+    } else if (hasNextNumber) {
+      queueWrap.append(
+        el("span", "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200", "Next #" + nextNumber)
+      );
+    } else {
+      queueWrap.append(el("span", "text-xs text-mute", "Live queue unavailable"));
+    }
+
+    // Place queue numbers below the availability/status tag (not below time)
+    const statusCol = el("div", "flex flex-col items-end gap-2");
+    const badgeRow = el("div", "flex flex-wrap items-center justify-end gap-2");
+    badgeRow.append(typeBadge, statusBadge);
+    statusCol.append(badgeRow, queueWrap);
+    header.append(names, statusCol);
 
     const capacityWrap = el("div");
+    capacityWrap.dataset.sessionCapacity = "";
     const capacityLabels = el(
       "div",
       "flex flex-wrap items-center gap-3 justify-between text-xs"
     );
     capacityLabels.append(
       el("span", "live", "Spots left (live)"),
-      el("b", "", remaining + " of " + capacity)
+      el("b", "", liveRemaining + " of " + liveCapacity)
     );
 
-    const bar = el("div", remaining === 0 ? "bar w" : "bar");
+    const bar = el("div", liveRemaining === 0 ? "bar w" : "bar");
     const fill = el("i");
     fill.style.width = percent + "%";
     bar.append(fill);
@@ -1290,7 +1706,7 @@
     );
     const deadline = bookingDeadline(session);
     const closed = bookingClosed(session);
-    const full = remaining <= 0;
+    const full = liveRemaining <= 0;
 
     footer.append(
       el(
@@ -4604,37 +5020,247 @@
     return card;
   }
 
-  function renderManagerNotice(notice) {
+  const adminNoticeState = {
+    editingId: null,
+    editingPublished: true,
+  };
+
+  function setAdminNoticeFormMode(mode, notice) {
+    const form = document.getElementById("admin-notice-form");
+    if (!form) return;
+
+    const title = form.querySelector("#admin-notice-title");
+    const body = form.querySelector("#admin-notice-body");
+    const submit = form.querySelector('[data-admin-notice-submit]');
+    const cancel = form.querySelector('[data-admin-notice-cancel-edit]');
+    const heading = document.querySelector("[data-admin-notice-form-heading]");
+    const status = form.querySelector("[data-admin-notice-status]");
+
+    if (mode === "edit" && notice) {
+      adminNoticeState.editingId = notice.id || null;
+      adminNoticeState.editingPublished = Boolean(notice.published);
+      if (title) title.value = notice.title || "";
+      if (body) body.value = notice.body || "";
+      if (submit) submit.textContent = "Save changes";
+      if (cancel) cancel.hidden = false;
+      if (heading) heading.textContent = "Edit hospital notice";
+      setStatus(status, "Editing notice. Saving will " + (adminNoticeState.editingPublished ? "keep it published." : "keep it as a draft/withdrawn notice."));
+    } else {
+      adminNoticeState.editingId = null;
+      adminNoticeState.editingPublished = true;
+      form.reset();
+      if (submit) submit.textContent = "Publish notice";
+      if (cancel) cancel.hidden = true;
+      if (heading) heading.textContent = "Publish hospital notices";
+      setStatus(status, "");
+    }
+  }
+
+  function renderAdminNotice(notice) {
     const card = el(
       "article",
-      "grid gap-2 rounded-lg border border-line bg-white p-3 sm:p-4"
+      "grid gap-3 rounded-lg border border-line bg-white p-3 sm:p-4"
     );
+    card.dataset.adminNotice = notice.id || "";
+
     const header = el("div", "flex flex-wrap items-center justify-between gap-2");
     header.append(el("h3", "font-semibold text-ink", notice.title || "Untitled notice"));
     header.append(
       badge(notice.published ? "Published" : "Draft", notice.published ? "green" : "slate")
     );
     card.append(header);
+
     card.append(
       el("p", "text-sm text-slate2 whitespace-pre-wrap break-words", notice.body || "")
     );
-    if (notice.createdAt) {
-      const created = el(
-        "time",
-        "text-xs text-mute",
-        "Created " + formatDateTime(notice.createdAt)
-      );
-      if (typeof notice.createdAt === "string") {
-        created.dateTime = notice.createdAt;
-      }
-      card.append(created);
+
+    const metaParts = [];
+    if (notice.publishedAt) metaParts.push("Published " + formatDateTime(notice.publishedAt));
+    else if (notice.createdAt) metaParts.push("Created " + formatDateTime(notice.createdAt));
+    if (notice.createdByName) metaParts.push(String(notice.createdByName));
+    if (metaParts.length) {
+      card.append(el("p", "text-xs text-mute", metaParts.join(" · ")));
     }
+
+    const actions = el("div", "flex flex-wrap gap-2 pt-1");
+    const editBtn = el("button", "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs", "Edit");
+    editBtn.type = "button";
+    editBtn.dataset.adminNoticeAction = "edit";
+    editBtn.dataset.noticeId = notice.id || "";
+
+    const toggleBtn = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs",
+      notice.published ? "Withdraw" : "Publish"
+    );
+    toggleBtn.type = "button";
+    toggleBtn.dataset.adminNoticeAction = notice.published ? "withdraw" : "publish";
+    toggleBtn.dataset.noticeId = notice.id || "";
+
+    const deleteBtn = el("button", "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-700 hover:bg-rose-50 min-h-9 px-3 py-1.5 text-xs", "Delete");
+    deleteBtn.type = "button";
+    deleteBtn.dataset.adminNoticeAction = "delete";
+    deleteBtn.dataset.noticeId = notice.id || "";
+
+    actions.append(editBtn, toggleBtn, deleteBtn);
+    card.append(actions);
     return card;
   }
 
-  async function loadManagerNotices(options) {
-    const container = document.querySelector("[data-manager-notices]");
-    const status = document.querySelector("[data-manager-notices-status]");
+  function ensureAdminNoticesPanel() {
+    const adminView = views.find((item) => item.dataset.view === "admin");
+    if (!adminView) return false;
+
+    const nav = adminView.querySelector("aside nav, aside");
+    const main = adminView.querySelector("main");
+    if (!nav || !main) return false;
+
+    let link = adminView.querySelector('[data-panel-link][href="#admin-n"]');
+    if (!link) {
+      link = document.createElement("a");
+      link.href = "#admin-n";
+      link.className = "sa";
+      link.dataset.panelLink = "";
+      link.textContent = "Notices";
+      const auditLink = adminView.querySelector('[data-panel-link][href="#admin-a"]');
+      if (auditLink && auditLink.parentNode === nav) {
+        nav.insertBefore(link, auditLink);
+      } else {
+        nav.append(link);
+      }
+    }
+
+    let panel = adminView.querySelector("#admin-n");
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = "admin-n";
+      panel.dataset.dashboardPanel = "";
+      panel.hidden = true;
+      panel.className = "grid gap-4";
+
+      const card = el("section", "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm grid gap-4");
+      card.append(
+        el("h2", "text-xl font-bold text-ink", "Manage hospital notices"),
+        el("p", "text-sm text-slate2", "Create, edit, publish/withdraw, and delete notices from the admin page. Published notices appear in the public dashboard’s Notices & announcements section.")
+      );
+
+      const form = document.createElement("form");
+      form.id = "admin-notice-form";
+      form.className = "grid gap-3 rounded-lg border border-line bg-snow p-3 sm:p-4";
+      form.setAttribute("novalidate", "");
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void saveAdminNotice(form);
+      });
+
+      const formHeading = el("h3", "font-semibold text-ink", "Publish hospital notices");
+      formHeading.dataset.adminNoticeFormHeading = "";
+
+      const titleWrap = el("div");
+      const titleLabel = el("label", "", "Notice title");
+      titleLabel.setAttribute("for", "admin-notice-title");
+      const titleInput = document.createElement("input");
+      titleInput.id = "admin-notice-title";
+      titleInput.name = "title";
+      titleInput.maxLength = 150;
+      titleInput.required = true;
+      titleInput.className = "w-full";
+      titleWrap.append(titleLabel, titleInput);
+
+      const bodyWrap = el("div");
+      const bodyLabel = el("label", "", "Notice body");
+      bodyLabel.setAttribute("for", "admin-notice-body");
+      const bodyInput = document.createElement("textarea");
+      bodyInput.id = "admin-notice-body";
+      bodyInput.name = "body";
+      bodyInput.rows = 5;
+      bodyInput.maxLength = 4000;
+      bodyInput.required = true;
+      bodyInput.className = "w-full";
+      bodyWrap.append(bodyLabel, bodyInput);
+
+      const limits = el("p", "text-xs text-mute", "Title up to 150 characters, body up to 4000 characters.");
+      const status = document.createElement("output");
+      status.dataset.adminNoticeStatus = "";
+      status.setAttribute("aria-live", "polite");
+      status.className = "block text-sm text-slate2";
+      status.hidden = true;
+
+      const actions = el("div", "flex flex-wrap gap-2");
+      const submit = document.createElement("button");
+      submit.type = "submit";
+      submit.dataset.adminNoticeSubmit = "";
+      submit.className = "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-brand border-brand text-white hover:bg-brand-d min-h-10 px-3.5 py-2";
+      submit.textContent = "Publish notice";
+
+      const cancelEdit = document.createElement("button");
+      cancelEdit.type = "button";
+      cancelEdit.dataset.adminNoticeCancelEdit = "";
+      cancelEdit.hidden = true;
+      cancelEdit.className = "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-10 px-3.5 py-2";
+      cancelEdit.textContent = "Cancel edit";
+      cancelEdit.addEventListener("click", () => {
+        setAdminNoticeFormMode("create");
+      });
+
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-10 px-3.5 py-2";
+      reset.textContent = "Clear";
+      reset.addEventListener("click", () => {
+        if (adminNoticeState.editingId) {
+          setAdminNoticeFormMode("create");
+        } else {
+          form.reset();
+          setStatus(status, "");
+        }
+      });
+      actions.append(submit, cancelEdit, reset);
+
+      form.append(formHeading, titleWrap, bodyWrap, limits, status, actions);
+      card.append(form);
+
+      const listCard = el("section", "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm grid gap-3");
+      listCard.append(el("h3", "font-semibold text-ink", "All notices"));
+      const listStatus = document.createElement("output");
+      listStatus.dataset.adminNoticesStatus = "";
+      listStatus.setAttribute("aria-live", "polite");
+      listStatus.className = "block text-sm text-slate2";
+      listStatus.textContent = "Loading notices…";
+      const list = el("div", "grid gap-3");
+      list.dataset.adminNotices = "";
+      list.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-admin-notice-action]");
+        if (!button) return;
+        const action = button.dataset.adminNoticeAction;
+        const noticeId = button.dataset.noticeId;
+        const notice = Array.isArray(state.adminNotices)
+          ? state.adminNotices.find((item) => String(item.id) === String(noticeId))
+          : null;
+        if (action === "edit" && notice) {
+          setAdminNoticeFormMode("edit", notice);
+          const titleField = form.querySelector("#admin-notice-title");
+          if (titleField && typeof titleField.focus === "function") titleField.focus();
+          form.scrollIntoView({ block: "nearest" });
+          return;
+        }
+        if (action === "publish" || action === "withdraw" || action === "delete") {
+          void handleAdminNoticeAction(action, noticeId, button);
+        }
+      });
+      listCard.append(listStatus, list);
+
+      panel.append(card, listCard);
+      main.append(panel);
+    }
+
+    return true;
+  }
+
+  async function loadAdminNotices(options) {
+    if (!ensureAdminNoticesPanel()) return false;
+    const container = document.querySelector("[data-admin-notices]");
+    const status = document.querySelector("[data-admin-notices-status]");
     if (!container || !status) return false;
 
     const settings = options || {};
@@ -4647,6 +5273,8 @@
         throw new Error("The notice service returned an invalid response.");
       }
 
+      state.adminNotices = notices;
+
       if (notices.length === 0) {
         setStatus(
           status,
@@ -4657,14 +5285,15 @@
         return true;
       }
 
-      container.replaceChildren(...notices.map(renderManagerNotice));
+      container.replaceChildren(...notices.map(renderAdminNotice));
       setStatus(
         status,
         settings.successMessage || "Showing " + notices.length + " notices."
       );
       return true;
     } catch (error) {
-      console.warn("Could not load manager notices:", error);
+      console.warn("Could not load admin notices:", error);
+      state.adminNotices = [];
       setStatus(
         status,
         "Could not load notices: " + (error.message || "Unknown error"),
@@ -4674,11 +5303,11 @@
     }
   }
 
-  async function publishManagerNotice(form) {
+  async function saveAdminNotice(form) {
     if (!form || form.dataset.busy === "true") return;
 
-    const status = document.querySelector("[data-manager-notice-status]");
-    const submit = form.querySelector('button[type="submit"]');
+    const status = form.querySelector("[data-admin-notice-status]");
+    const submit = form.querySelector('[data-admin-notice-submit]');
     const title = String(form.elements.title.value || "");
     const body = String(form.elements.body.value || "");
     const validated = ManagerUI.noticePayload(title, body);
@@ -4690,45 +5319,169 @@
       return;
     }
 
+    const editingId = adminNoticeState.editingId;
+    const payload = {
+      title: validated.payload.title,
+      body: validated.payload.body,
+      published: editingId ? Boolean(adminNoticeState.editingPublished) : true,
+    };
+
     if (!ManagerUI.lockAction(submit)) return;
     form.dataset.busy = "true";
-    setStatus(status, "Publishing notice…");
+    setStatus(status, editingId ? "Saving changes…" : "Publishing notice…");
 
     try {
-      await MC.createNotice(validated.payload);
+      if (editingId) {
+        await MC.updateNotice(editingId, payload);
+      } else {
+        await MC.createNotice(payload);
+      }
 
-      form.reset();
-      ManagerUI.applyNoticeFormState({
-        form,
-        toggle: document.querySelector("[data-manager-notice-toggle]"),
-        open: false,
+      setAdminNoticeFormMode("create");
+      const refreshed = await loadAdminNotices({
+        successMessage: editingId ? "Notice updated successfully." : "Notice published successfully.",
       });
-      // The form (and its output) is now hidden, so publish feedback must go
-      // to the always-visible notices status region instead.
-      if (status) setStatus(status, "");
-
-      const refreshed = await loadManagerNotices({
-        successMessage: "Notice published successfully.",
-      });
-
       if (!refreshed) {
         setStatus(
-          document.querySelector("[data-manager-notices-status]"),
-          "Notice published successfully, but the notice list could not be refreshed. Reload the page to see the new notice.",
+          document.querySelector("[data-admin-notices-status]"),
+          (editingId ? "Notice updated successfully." : "Notice published successfully.") + " The notice list could not be refreshed.",
           true
         );
       }
+      state.publicNoticesLoaded = false;
+      if (activeView === "index") {
+        void loadPublicNotices({ force: true });
+      }
     } catch (error) {
-      console.warn("Could not publish manager notice:", error);
-      // Keep the typed title and body so the manager can retry.
+      console.warn("Could not save admin notice:", error);
       setStatus(
         status,
-        "Could not publish notice: " + (error.message || "Unknown error"),
+        "Could not " + (editingId ? "update" : "publish") + " notice: " + (error.message || "Unknown error"),
         true
       );
     } finally {
       form.dataset.busy = "false";
       ManagerUI.unlockAction(submit);
+    }
+  }
+
+  function confirmAdminNoticeDelete() {
+    const status = document.querySelector("[data-admin-notices-status]");
+    if (!status) return Promise.resolve(false);
+
+    return new Promise((resolve) => {
+      status.hidden = false;
+      status.className = "block text-sm text-slate2";
+      status.replaceChildren();
+
+      const wrap = el("div", "flex flex-wrap items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3");
+      wrap.append(
+        el("span", "text-rose-900 font-medium", "Delete this notice? This cannot be undone.")
+      );
+
+      const yes = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-600 border-rose-600 text-white hover:bg-rose-700 min-h-9 px-3 py-1.5 text-xs",
+        "Yes"
+      );
+      yes.type = "button";
+      const no = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs",
+        "No"
+      );
+      no.type = "button";
+
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        yes.disabled = true;
+        no.disabled = true;
+        status.replaceChildren();
+        resolve(value);
+      };
+
+      yes.addEventListener("click", () => finish(true));
+      no.addEventListener("click", () => finish(false));
+      wrap.append(yes, no);
+      status.append(wrap);
+    });
+  }
+
+  async function handleAdminNoticeAction(action, noticeId, button) {
+    const id = String(noticeId || "").trim();
+    if (!id) {
+      setStatus(
+        document.querySelector("[data-admin-notices-status]"),
+        "Could not " + action + " notice: missing notice id.",
+        true
+      );
+      return;
+    }
+
+    if (action === "delete") {
+      const confirmed = await confirmAdminNoticeDelete();
+      if (!confirmed) {
+        setStatus(document.querySelector("[data-admin-notices-status]"), "Delete cancelled.");
+        return;
+      }
+    }
+
+    const listStatus = document.querySelector("[data-admin-notices-status]");
+    const canLock = !button || !window.ManagerUI || typeof ManagerUI.lockAction !== "function" || ManagerUI.lockAction(button);
+    if (!canLock) return;
+
+    setStatus(
+      listStatus,
+      action === "delete"
+        ? "Deleting notice…"
+        : action === "publish"
+          ? "Publishing notice…"
+          : "Withdrawing notice…"
+    );
+
+    try {
+      if (action === "delete") {
+        await MC.deleteNotice(id);
+        if (String(adminNoticeState.editingId || "") === id) {
+          setAdminNoticeFormMode("create");
+        }
+      } else if (action === "publish") {
+        await MC.publishNotice(id);
+      } else if (action === "withdraw") {
+        await MC.withdrawNotice(id);
+      } else {
+        throw new Error("Unsupported notice action.");
+      }
+
+      const successMessage =
+        action === "delete"
+          ? "Notice deleted successfully."
+          : action === "publish"
+            ? "Notice published successfully."
+            : "Notice withdrawn successfully.";
+
+      const refreshed = await loadAdminNotices({ successMessage });
+      if (!refreshed) {
+        setStatus(listStatus, successMessage + " The notice list could not be refreshed.", true);
+      }
+      state.publicNoticesLoaded = false;
+      void loadPublicNotices({ force: true }).catch(() => {});
+    } catch (error) {
+      console.warn("Could not perform admin notice action:", error);
+      setStatus(
+        listStatus,
+        "Could not " + action + " notice: " + (error.message || "Unknown error"),
+        true
+      );
+    } finally {
+      if (button && window.ManagerUI && typeof ManagerUI.unlockAction === "function") {
+        ManagerUI.unlockAction(button);
+      } else if (button) {
+        button.disabled = false;
+        if (button.dataset) button.dataset.busy = "false";
+      }
     }
   }
 
@@ -5685,32 +6438,6 @@
       return;
     }
 
-    const noticeToggle = event.target.closest("[data-manager-notice-toggle]");
-    if (noticeToggle) {
-      const form = document.querySelector("[data-manager-notice-form]");
-      if (form) {
-        ManagerUI.applyNoticeFormState({
-          form,
-          toggle: noticeToggle,
-          open: form.hidden,
-        });
-      }
-      return;
-    }
-
-    if (event.target.closest("[data-manager-notice-cancel]")) {
-      const form = document.querySelector("[data-manager-notice-form]");
-      if (form) {
-        ManagerUI.applyNoticeFormState({
-          form,
-          toggle: document.querySelector("[data-manager-notice-toggle]"),
-          open: false,
-        });
-      }
-      setStatus(document.querySelector("[data-manager-notice-status]"), "");
-      return;
-    }
-
     const book = event.target.closest("[data-book-session]");
     if (book) {
       const session = state.sessions.find(
@@ -6050,14 +6777,6 @@
     managerCreateSessionForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void handleManagerCreateSession(managerCreateSessionForm);
-    });
-  }
-
-  const managerNoticeForm = document.querySelector("[data-manager-notice-form]");
-  if (managerNoticeForm) {
-    managerNoticeForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void publishManagerNotice(managerNoticeForm);
     });
   }
 

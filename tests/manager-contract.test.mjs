@@ -25,45 +25,30 @@ function attribute(tag, name) {
   return match ? match[1] : null;
 }
 
-test("notice form is labelled and keeps its toggle relationships", () => {
-  const toggle = tagWithAttribute("data-manager-notice-toggle");
-  assert.match(toggle, /<button\b/);
-  assert.equal(attribute(toggle, "aria-controls"), "manager-notice-form");
-  assert.equal(attribute(toggle, "aria-expanded"), "false");
-
-  const form = tagWithAttribute('id="manager-notice-form"');
-  assert.match(form, /<form\b/);
-  assert.equal(
-    attribute(form, "aria-labelledby"),
-    "manager-notice-form-heading"
-  );
-  assert.match(
-    HTML,
-    /<h3 id="manager-notice-form-heading" class="sr-only">Publish a hospital notice<\/h3>/
-  );
+test("manager interface no longer includes notice creation or publishing controls", () => {
+  assert.doesNotMatch(HTML, /data-manager-notice-toggle/);
+  assert.doesNotMatch(HTML, /id="manager-notice-form"/);
+  assert.doesNotMatch(HTML, /data-manager-notice-status/);
+  assert.doesNotMatch(HTML, /data-manager-notices-status/);
+  assert.doesNotMatch(HTML, /Publish a hospital notice/);
+  assert.doesNotMatch(APP, /async function publishManagerNotice/);
+  assert.doesNotMatch(APP, /async function loadManagerNotices/);
+  assert.doesNotMatch(APP, /function renderManagerNotice/);
+  assert.doesNotMatch(APP, /data-manager-notice-toggle/);
+  assert.doesNotMatch(APP, /data-manager-notice-form/);
 });
 
-test("notice fields keep labels and match the backend limits", () => {
-  const title = tagWithAttribute('id="manager-notice-title"');
-  const body = tagWithAttribute('id="manager-notice-body"');
-
-  assert.equal(attribute(title, "maxlength"), "150");
-  assert.equal(attribute(body, "maxlength"), "4000");
-  assert.match(title, /\brequired\b/);
-  assert.match(body, /\brequired\b/);
-
-  assert.match(HTML, /<label for="manager-notice-title">Notice title<\/label>/);
-  assert.match(HTML, /<label for="manager-notice-body">Notice body<\/label>/);
-  assert.equal(attribute(title, "aria-describedby"), "manager-notice-limits");
-  assert.equal(attribute(body, "aria-describedby"), "manager-notice-limits");
-  assert.match(HTML, /id="manager-notice-limits"[^>]*>Title up to 150 characters/);
-});
-
-test("notice status stays a polite live region the form can unhide", () => {
-  const status = tagWithAttribute("data-manager-notice-status");
-  assert.match(status, /<output\b/);
-  assert.equal(attribute(status, "aria-live"), "polite");
-  assert.match(status, /\bhidden\b/);
+test("admin notices management and delete confirmation are implemented", () => {
+  assert.match(APP, /async function loadAdminNotices/);
+  assert.match(APP, /async function saveAdminNotice/);
+  assert.match(APP, /function renderAdminNotice/);
+  assert.match(APP, /async function handleAdminNoticeAction/);
+  assert.match(APP, /function confirmAdminNoticeDelete/);
+  assert.match(APP, /Delete this notice\? This cannot be undone\./);
+  assert.match(APP, /"Yes"/);
+  assert.match(APP, /"No"/);
+  assert.match(APP, /MC\.deleteNotice\(id\)/);
+  assert.match(HTML, /id="manager-x"[\s\S]*?<h3 class="font-semibold text-ink">Patient feedback<\/h3>/);
 });
 
 test("dashboard exposes a live status region and real metric slots", () => {
@@ -119,18 +104,10 @@ test("notice and review rendering use the backend field names", () => {
   assert.doesNotMatch(APP, /review\.id\b/);
 });
 
-test("focus returns to the toggle when the form closes", () => {
+test("admin notice save and moderation are protected against duplicate clicks", () => {
   assert.match(
     APP,
-    /ManagerUI\.applyNoticeFormState\(\{[\s\S]{0,220}?open: false,/
-  );
-  assert.match(APP, /ManagerUI\.applyNoticeFormState\(\{[\s\S]{0,220}?open: form\.hidden,/);
-});
-
-test("publishing and moderation are protected against duplicate clicks", () => {
-  assert.match(
-    APP,
-    /async function publishManagerNotice[\s\S]{0,900}?ManagerUI\.lockAction\(submit\)/
+    /async function saveAdminNotice[\s\S]{0,900}?ManagerUI\.lockAction\(submit\)/
   );
   assert.match(
     APP,
@@ -169,16 +146,19 @@ test("manager table cells escape backend values, including queue numbers", () =>
   assert.match(APP, /Failed to load sessions: \$\{message\}/);
 });
 
-test("publish feedback is written to a region that stays visible", () => {
-  const start = APP.indexOf("async function publishManagerNotice");
-  assert.ok(start > -1);
-  const block = APP.slice(start, start + 2200);
+test("admin notice save and action feedback is written to visible status regions", () => {
+  const saveStart = APP.indexOf("async function saveAdminNotice");
+  assert.ok(saveStart > -1, "saveAdminNotice is missing");
+  const saveBlock = APP.slice(saveStart, saveStart + 2600);
+  assert.match(saveBlock, /Notice updated successfully\.|Notice published successfully\./);
+  assert.match(saveBlock, /data-admin-notices-status/);
 
-  // The form (and its <output>) is hidden on success, so the result must go
-  // to the notices list status, not the in-form output.
-  assert.match(block, /successMessage: "Notice published successfully\."/);
-  assert.match(block, /data-manager-notices-status/);
-  assert.match(block, /if \(status\) setStatus\(status, ""\)/);
+  const actionStart = APP.indexOf("async function handleAdminNoticeAction");
+  assert.ok(actionStart > -1, "handleAdminNoticeAction is missing");
+  const actionBlock = APP.slice(actionStart, actionStart + 2600);
+  assert.match(actionBlock, /Notice deleted successfully\./);
+  assert.match(actionBlock, /Could not " \+ action \+ " notice: "/);
+  assert.match(actionBlock, /data-admin-notices-status/);
 });
 
 test("dashboard cards use the tested formatter and honest labels", () => {

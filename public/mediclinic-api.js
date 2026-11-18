@@ -233,6 +233,10 @@
     },
 
     // Notices ---------------------------------------------------------
+    notices() {
+      return request("notices");
+    },
+
     managerNotices() {
       return request("notices/manage");
     },
@@ -241,6 +245,33 @@
       return request("notices", {
         method: "POST",
         body: payload,
+      });
+    },
+
+    updateNotice(noticeId, payload) {
+      return request("notices/" + encodeURIComponent(noticeId), {
+        method: "PUT",
+        body: payload,
+      });
+    },
+
+    publishNotice(noticeId) {
+      return request(
+        "notices/" + encodeURIComponent(noticeId) + "/publish",
+        { method: "PATCH" }
+      );
+    },
+
+    withdrawNotice(noticeId) {
+      return request(
+        "notices/" + encodeURIComponent(noticeId) + "/withdraw",
+        { method: "PATCH" }
+      );
+    },
+
+    deleteNotice(noticeId) {
+      return request("notices/" + encodeURIComponent(noticeId), {
+        method: "DELETE",
       });
     },
 
