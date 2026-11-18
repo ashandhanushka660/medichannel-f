@@ -4371,9 +4371,9 @@
       if (elDocsToday) elDocsToday.textContent = doctorsToday || "0";
       if (elDocsNow) elDocsNow.textContent = doctorsActiveNow || "0";
       if (elQueueServing) elQueueServing.textContent = liveQueueText;
-      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "112";
-      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "86 / 26";
-      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 312,500";
+      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "0";
+      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "0 / 0";
+      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 0";
 
       function renderRow(s) {
         const tr = document.createElement("tr");
