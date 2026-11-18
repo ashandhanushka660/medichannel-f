@@ -1,0 +1,249 @@
+/* MediChannel manager UI helpers.
+ *
+ * Small, dependency-free functions shared by the manager dashboard, the
+ * notice form and the feedback moderation panel. Keeping this logic in one
+ * place makes the backend contract easy to unit test without a DOM.
+ */
+(function () {
+  "use strict";
+
+  // Mirrors com.medichannel.dto.notice.NoticeRequest validation.
+  var NOTICE_LIMITS = Object.freeze({ title: 150, body: 4000 });
+
+  function toNumber(value) {
+    if (typeof value === "number") {
+      return isFinite(value) ? value : null;
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      var parsed = Number(value);
+      return isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+
+  function formatCount(value) {
+    var number = toNumber(value);
+    if (number === null) return "—";
+    return number.toLocaleString("en-LK");
+  }
+
+  // Sri Lankan rupees. Never renders a missing figure as zero.
+  function formatLkr(value) {
+    var number = toNumber(value);
+    if (number === null) return "—";
+    return (
+      "LKR " +
+      number.toLocaleString("en-LK", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  }
+
+  function validateNoticeInput(title, body) {
+    var cleanTitle = String(title == null ? "" : title).trim();
+    var cleanBody = String(body == null ? "" : body).trim();
+
+    if (!cleanTitle && !cleanBody) {
+      return {
+        ok: false,
+        message: "Enter a title and notice body before publishing.",
+      };
+    }
+    if (!cleanTitle) {
+      return { ok: false, message: "A notice title is required." };
+    }
+    if (!cleanBody) {
+      return { ok: false, message: "A notice body is required." };
+    }
+    if (cleanTitle.length > NOTICE_LIMITS.title) {
+      return {
+        ok: false,
+        message:
+          "The title must not exceed " + NOTICE_LIMITS.title + " characters.",
+      };
+    }
+    if (cleanBody.length > NOTICE_LIMITS.body) {
+      return {
+        ok: false,
+        message:
+          "The body must not exceed " + NOTICE_LIMITS.body + " characters.",
+      };
+    }
+    return { ok: true, title: cleanTitle, body: cleanBody };
+  }
+
+  // Builds the exact NoticeRequest payload. `published` is required by the
+  // backend; without it notices are silently created as drafts.
+  function noticePayload(title, body) {
+    var validated = validateNoticeInput(title, body);
+    if (!validated.ok) return validated;
+    return {
+      ok: true,
+      payload: {
+        title: validated.title,
+        body: validated.body,
+        published: true,
+      },
+    };
+  }
+
+  function sumField(list, field) {
+    if (!Array.isArray(list)) return null;
+    if (list.length === 0) return 0;
+    var total = 0;
+    for (var index = 0; index < list.length; index += 1) {
+      var value = toNumber(list[index] ? list[index][field] : null);
+      if (value === null) return null;
+      total += value;
+    }
+    return total;
+  }
+
+  function countDoctors(list) {
+    if (!Array.isArray(list)) return null;
+    if (list.length === 0) return 0;
+    var names = new Set();
+    list.forEach(function (session) {
+      var name = session && typeof session.doctorName === "string"
+        ? session.doctorName.trim()
+        : "";
+      if (name) names.add(name);
+    });
+    // Sessions exist but the backend omitted doctor names: unknown, not zero.
+    return names.size === 0 ? null : names.size;
+  }
+
+  // Maps ReportOverviewResponse onto the manager dashboard cards.
+  // Missing values stay null so the UI can show "—" instead of a fake zero.
+  function dashboardMetrics(report) {
+    var metrics = {
+      sessionsToday: null,
+      doctorsToday: null,
+      completedToday: null,
+      cancelledToday: null,
+      appointmentsToday: null,
+      physicalAppointments: null,
+      onlineAppointments: null,
+      revenueLkr: null,
+    };
+
+    if (!report || typeof report !== "object") return metrics;
+
+    var sessions = Array.isArray(report.todaySessions)
+      ? report.todaySessions
+      : null;
+
+    metrics.sessionsToday = sessions ? sessions.length : null;
+    metrics.doctorsToday = countDoctors(sessions);
+    metrics.completedToday = sumField(sessions, "completed");
+    metrics.cancelledToday = toNumber(report.cancelledAppointments);
+    metrics.appointmentsToday = toNumber(report.totalAppointments);
+    metrics.physicalAppointments = toNumber(report.physicalAppointments);
+    metrics.onlineAppointments = toNumber(report.onlineAppointments);
+    metrics.revenueLkr = toNumber(report.revenueLkr);
+
+    return metrics;
+  }
+
+  function formatTypeSplit(metrics) {
+    if (!metrics) return "—";
+    var physical = metrics.physicalAppointments;
+    var online = metrics.onlineAppointments;
+    if (physical === null || online === null) return "—";
+    return formatCount(physical) + " / " + formatCount(online);
+  }
+
+  // Formats dashboardMetrics() into the exact strings the dashboard cards
+  // render. Kept here so "zero" versus "unavailable" stays testable without
+  // a DOM.
+  function dashboardCardValues(metrics) {
+    var values = metrics || {};
+    return {
+      sessionsToday: formatCount(values.sessionsToday),
+      doctorsToday: formatCount(values.doctorsToday),
+      completedToday: formatCount(values.completedToday),
+      cancelledToday: formatCount(values.cancelledToday),
+      appointmentsToday: formatCount(values.appointmentsToday),
+      typeSplit: formatTypeSplit(values),
+      revenue: formatLkr(values.revenueLkr),
+    };
+  }
+
+  // Opens/closes the notice form, keeps aria-expanded in sync and moves
+  // keyboard focus to the field on open and back to the toggle on close.
+  function applyNoticeFormState(state) {
+    var form = state && state.form;
+    if (!form) return false;
+
+    var open = Boolean(state.open);
+    form.hidden = !open;
+
+    if (state.toggle) {
+      state.toggle.setAttribute("aria-expanded", String(open));
+    }
+
+    if (open) {
+      if (
+        form.elements &&
+        form.elements.title &&
+        typeof form.elements.title.focus === "function"
+      ) {
+        form.elements.title.focus();
+      }
+    } else if (state.toggle && typeof state.toggle.focus === "function") {
+      state.toggle.focus();
+    }
+
+    return true;
+  }
+
+  // Returns false when the same control is already busy, so double clicks
+  // cannot fire two moderation/publish requests.
+  function lockAction(button) {
+    if (!button) return false;
+    if (button.dataset && button.dataset.busy === "true") return false;
+    if (button.dataset) button.dataset.busy = "true";
+    button.disabled = true;
+    return true;
+  }
+
+  function unlockAction(button) {
+    if (!button) return false;
+    if (button.dataset) button.dataset.busy = "false";
+    button.disabled = false;
+    return true;
+  }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  var MCManager = {
+    NOTICE_LIMITS: NOTICE_LIMITS,
+    validateNoticeInput: validateNoticeInput,
+    noticePayload: noticePayload,
+    dashboardMetrics: dashboardMetrics,
+    dashboardCardValues: dashboardCardValues,
+    formatCount: formatCount,
+    formatLkr: formatLkr,
+    formatTypeSplit: formatTypeSplit,
+    applyNoticeFormState: applyNoticeFormState,
+    lockAction: lockAction,
+    unlockAction: unlockAction,
+    escapeHtml: escapeHtml,
+  };
+
+  if (typeof window !== "undefined") {
+    window.MCManager = MCManager;
+  }
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = MCManager;
+  }
+})();

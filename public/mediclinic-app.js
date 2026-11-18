@@ -15,6 +15,7 @@
   const $ = (id) => document.getElementById(id);
   const views = Array.from(document.querySelectorAll("[data-view]"));
   const TZ = "Asia/Colombo";
+  const ManagerUI = window.MCManager;
 
   const RB = {
     CUSTOMER: [
@@ -4071,7 +4072,10 @@
       logs.forEach((log) => tbody.append(renderAuditLogRow(log)));
     } catch (err) {
       console.warn("Could not load audit logs:", err);
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${err.message || "Unknown error"}</td></tr>`;
+      // Escape the message: even though the API client sanitises server
+      // text, the error row must never interpret a value as markup.
+      const message = escapeHtml(err.message || "Unknown error");
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${message}</td></tr>`;
     }
   }
 
@@ -4324,6 +4328,10 @@
     const dashTbody = document.querySelector("[data-manager-dashboard-sessions-tbody]");
     if (!tbody && !dashTbody) return;
 
+    // The stat cards are authoritative backend aggregates, not public-feed
+    // approximations. Load them independently of the session table.
+    void loadManagerDashboard();
+
     try {
       const sessions = await MC.sessions({});
       if (!Array.isArray(sessions) || sessions.length === 0) {
@@ -4344,46 +4352,6 @@
       // Calculate Manager Dashboard Stats
       const today = todayISO();
       const todaySessions = sessions.filter((s) => s.sessionDate === today);
-      const doctorsToday = new Set(todaySessions.map((s) => s.doctorId)).size;
-      const doctorsActiveNow = new Set(
-        sessions.filter((s) => s.status === "IN_PROGRESS").map((s) => s.doctorId)
-      ).size;
-
-      const activeNowServing = sessions
-        .filter((s) => s.status === "IN_PROGRESS" && s.queue && s.queue.nowServing != null)
-        .map((s) => "#" + s.queue.nowServing);
-
-      const liveQueueText = activeNowServing.length > 0
-        ? "Now serving " + activeNowServing.join(", ")
-        : (sessions.some((s) => s.status === "IN_PROGRESS") ? "In consultation" : (todaySessions.length > 0 ? "Starts at #1" : "—"));
-
-      const totalBookedToday = todaySessions.reduce(
-        (acc, s) => acc + Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)),
-        0
-      );
-      const physCount = todaySessions.filter((s) => s.consultationType === "PHYSICAL").length;
-      const onlineCount = todaySessions.filter((s) => s.consultationType === "ONLINE").length;
-      const totalRevenueToday = todaySessions.reduce(
-        (acc, s) => acc + (Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)) * (s.feeLkr || 0)),
-        0
-      );
-
-      // Populate dashboard stats elements
-      const elSessionsToday = document.querySelector("[data-manager-sessions-today]");
-      const elDocsToday = document.querySelector("[data-manager-doctors-today]");
-      const elDocsNow = document.querySelector("[data-manager-doctors-now]");
-      const elQueueServing = document.querySelector("[data-manager-live-queue-serving]");
-      const elApptsToday = document.querySelector("[data-manager-appointments-today]");
-      const elTypeSplit = document.querySelector("[data-manager-type-split]");
-      const elRevenue = document.querySelector("[data-manager-revenue-today]");
-
-      if (elSessionsToday) elSessionsToday.textContent = todaySessions.length || "0";
-      if (elDocsToday) elDocsToday.textContent = doctorsToday || "0";
-      if (elDocsNow) elDocsNow.textContent = doctorsActiveNow || "0";
-      if (elQueueServing) elQueueServing.textContent = liveQueueText;
-      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "0";
-      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "0 / 0";
-      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 0";
 
       function renderRow(s) {
         const tr = document.createElement("tr");
@@ -4404,11 +4372,11 @@
 
         let queueBadge = '<span class="text-xs text-mute font-medium">—</span>';
         if (s.queue && s.queue.nowServing != null) {
-          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-xs"><span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>Now serving #${s.queue.nowServing}</span>`;
+          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-xs"><span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>Now serving #${escapeHtml(s.queue.nowServing)}</span>`;
         } else if (s.status === "IN_PROGRESS") {
-          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">In queue: #${s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1}</span>`;
+          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">In queue: #${escapeHtml(s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1)}</span>`;
         } else if (s.status === "OPEN" || s.status === "SCHEDULED") {
-          queueBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200">Starts at #${s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1}</span>`;
+          queueBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200">Starts at #${escapeHtml(s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1)}</span>`;
         } else if (s.status === "COMPLETED") {
           queueBadge = `<span class="text-xs text-slate2 font-medium">Completed</span>`;
         } else if (s.status === "CANCELLED") {
@@ -4417,32 +4385,32 @@
 
         tr.innerHTML = `
           <td data-label="Doctor">
-            <div class="font-semibold text-ink">${s.doctorName ? "Dr. " + s.doctorName : "Doctor"}</div>
-            <div class="text-xs text-mute">${s.specialisation || "General"}</div>
+            <div class="font-semibold text-ink">${s.doctorName ? "Dr. " + escapeHtml(s.doctorName) : "Doctor"}</div>
+            <div class="text-xs text-mute">${escapeHtml(s.specialisation || "General")}</div>
           </td>
           <td data-label="Date & Time">
-            <div class="text-sm font-medium">${s.sessionDate || "—"}</div>
-            <div class="text-xs text-slate2">${(s.startTime || "").slice(0, 5)} - ${(s.endTime || "").slice(0, 5)}${s.delayMinutes ? ` <span class="text-peach font-bold">(+${s.delayMinutes}m delay)</span>` : ""}</div>
+            <div class="text-sm font-medium">${escapeHtml(s.sessionDate || "—")}</div>
+            <div class="text-xs text-slate2">${escapeHtml((s.startTime || "").slice(0, 5))} - ${escapeHtml((s.endTime || "").slice(0, 5))}${s.delayMinutes ? ` <span class="text-peach font-bold">(+${escapeHtml(s.delayMinutes)}m delay)</span>` : ""}</div>
           </td>
           <td data-label="Type">${typeBadge}</td>
           <td data-label="Room">
-            <span class="text-sm font-medium text-slate2">${s.roomNumber || (s.consultationType === "ONLINE" ? "Online Room" : "—")}</span>
+            <span class="text-sm font-medium text-slate2">${escapeHtml(s.roomNumber || (s.consultationType === "ONLINE" ? "Online Room" : "—"))}</span>
           </td>
           <td data-label="Current Queue #">
             ${queueBadge}
           </td>
           <td data-label="Spots" class="text-right">
-            <span class="font-bold text-brand">${s.remainingAppointments != null ? s.remainingAppointments : "—"}</span>
-            <span class="text-xs text-mute">/ ${s.maxAppointments || "—"}</span>
+            <span class="font-bold text-brand">${s.remainingAppointments != null ? escapeHtml(s.remainingAppointments) : "—"}</span>
+            <span class="text-xs text-mute">/ ${escapeHtml(s.maxAppointments || "—")}</span>
           </td>
           <td data-label="Status">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${statusClass}">${s.status}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${statusClass}">${escapeHtml(s.status)}</span>
           </td>
           <td data-label="Actions">
             <div class="flex items-center gap-1.5 justify-end">
               ${canCancel ? `
-                <button type="button" data-delay-session="${sessionId}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-line text-amber-700 hover:bg-amber-50 px-2 py-1 text-xs" title="Delay session by 15 mins">⏱ +15m</button>
-                <button type="button" data-cancel-session="${sessionId}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-600 hover:bg-rose-50 px-2 py-1 text-xs" title="Cancel session">Cancel</button>
+                <button type="button" data-delay-session="${escapeHtml(sessionId)}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-line text-amber-700 hover:bg-amber-50 px-2 py-1 text-xs" title="Delay session by 15 mins">⏱ +15m</button>
+                <button type="button" data-cancel-session="${escapeHtml(sessionId)}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-600 hover:bg-rose-50 px-2 py-1 text-xs" title="Cancel session">Cancel</button>
               ` : '<span class="text-xs text-mute">—</span>'}
             </div>
           </td>
@@ -4462,9 +4430,101 @@
       }
     } catch (err) {
       console.warn("Could not load manager sessions:", err);
-      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
-      if (dashTbody) dashTbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+      const message = escapeHtml(err.message || "Unknown error");
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${message}</td></tr>`;
+      if (dashTbody) dashTbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${message}</td></tr>`;
     }
+  }
+
+  const DASHBOARD_REFRESH_MS = 15000;
+  let dashboardRequest = null;
+  let dashboardFetchedAt = 0;
+
+  // Session changes make today's aggregates stale; the next dashboard load
+  // must bypass the short refresh window.
+  function invalidateManagerDashboard() {
+    dashboardFetchedAt = 0;
+  }
+
+  function setManagerDashboardCards(values) {
+    const targets = [
+      ["[data-manager-sessions-today]", values.sessionsToday],
+      ["[data-manager-doctors-today]", values.doctorsToday],
+      ["[data-manager-completed-today]", values.completedToday],
+      ["[data-manager-cancelled-today]", values.cancelledToday],
+      ["[data-manager-appointments-today]", values.appointmentsToday],
+      ["[data-manager-type-split]", values.typeSplit],
+      ["[data-manager-revenue-today]", values.revenue],
+    ];
+
+    targets.forEach(([selector, value]) => {
+      const node = document.querySelector(selector);
+      if (node) node.textContent = value;
+    });
+  }
+
+  // Loads GET /reports/overview scoped to today and fills the dashboard cards.
+  // Every figure is computed by the backend; missing values render as "—".
+  async function loadManagerDashboard(options) {
+    const settings = options || {};
+    const status = document.querySelector("[data-manager-dashboard-status]");
+    const fresh = Date.now() - dashboardFetchedAt < DASHBOARD_REFRESH_MS;
+
+    if (!settings.force && fresh) return true;
+    if (dashboardRequest) return dashboardRequest;
+
+    const firstLoad = dashboardFetchedAt === 0;
+    if (firstLoad) {
+      setManagerDashboardCards({
+        sessionsToday: "…",
+        doctorsToday: "…",
+        completedToday: "…",
+        cancelledToday: "…",
+        appointmentsToday: "…",
+        typeSplit: "…",
+        revenue: "…",
+      });
+    }
+    setStatus(status, firstLoad ? "Loading today’s figures…" : "");
+
+    dashboardRequest = (async () => {
+      try {
+        const today = todayISO();
+        const report = await MC.reportOverview({ from: today, to: today });
+        const metrics = ManagerUI.dashboardMetrics(report);
+
+        // Formatting (zero vs unavailable, LKR) lives in the tested helper.
+        setManagerDashboardCards(ManagerUI.dashboardCardValues(metrics));
+
+        dashboardFetchedAt = Date.now();
+        setStatus(status, "");
+        return true;
+      } catch (error) {
+        console.warn("Could not load manager dashboard report:", error);
+        dashboardFetchedAt = 0;
+        setManagerDashboardCards({
+          sessionsToday: "—",
+          doctorsToday: "—",
+          completedToday: "—",
+          cancelledToday: "—",
+          appointmentsToday: "—",
+          typeSplit: "—",
+          revenue: "—",
+        });
+        setStatus(
+          status,
+          "Could not load today’s figures: " +
+            (error.message || "Unknown error") +
+            " The dashboard values are unavailable.",
+          true
+        );
+        return false;
+      } finally {
+        dashboardRequest = null;
+      }
+    })();
+
+    return dashboardRequest;
   }
 
   function managerReviewActionButton(review, action, label) {
@@ -4475,7 +4535,11 @@
     );
     button.type = "button";
     button.dataset.reviewAction = action;
-    button.dataset.reviewId = String(review.id);
+    button.dataset.reviewId = String(review.reviewId);
+    button.setAttribute(
+      "aria-label",
+      label + " review from " + (review.createdAt ? formatDateTime(review.createdAt) : "this patient")
+    );
     return button;
   }
 
@@ -4486,8 +4550,8 @@
     );
     card.dataset.managerReview = "";
 
-    const status = typeof review.status === "string"
-      ? review.status.trim().toUpperCase()
+    const status = typeof review.moderationStatus === "string"
+      ? review.moderationStatus.trim().toUpperCase()
       : "";
     const heading = el("div", "flex flex-wrap items-center justify-between gap-2");
     const rating = Number(review.rating);
@@ -4527,7 +4591,7 @@
     footer.append(created);
 
     const actions = el("div", "flex flex-wrap gap-2");
-    if (typeof review.id === "string" && review.id) {
+    if (typeof review.reviewId === "string" && review.reviewId) {
       if (status !== "APPROVED") {
         actions.append(managerReviewActionButton(review, "approve", "Approve"));
       }
@@ -4548,7 +4612,7 @@
     const header = el("div", "flex flex-wrap items-center justify-between gap-2");
     header.append(el("h3", "font-semibold text-ink", notice.title || "Untitled notice"));
     header.append(
-      badge(notice.active ? "Published" : "Draft", notice.active ? "green" : "slate")
+      badge(notice.published ? "Published" : "Draft", notice.published ? "green" : "slate")
     );
     card.append(header);
     card.append(
@@ -4611,47 +4675,60 @@
   }
 
   async function publishManagerNotice(form) {
+    if (!form || form.dataset.busy === "true") return;
+
     const status = document.querySelector("[data-manager-notice-status]");
     const submit = form.querySelector('button[type="submit"]');
-    const title = String(form.elements.title.value || "").trim();
-    const body = String(form.elements.body.value || "").trim();
+    const title = String(form.elements.title.value || "");
+    const body = String(form.elements.body.value || "");
+    const validated = ManagerUI.noticePayload(title, body);
 
-    if (!title || !body) {
-      setStatus(status, "Enter a title and notice body before publishing.", true);
+    if (!validated.ok) {
+      setStatus(status, validated.message, true);
+      const field = form.elements[title.trim() ? "body" : "title"];
+      if (field && typeof field.focus === "function") field.focus();
       return;
     }
 
-    if (submit) submit.disabled = true;
+    if (!ManagerUI.lockAction(submit)) return;
+    form.dataset.busy = "true";
     setStatus(status, "Publishing notice…");
 
     try {
-      await MC.createNotice({ title, body, active: true });
+      await MC.createNotice(validated.payload);
+
       form.reset();
-      form.hidden = true;
-      const toggle = document.querySelector("[data-manager-notice-toggle]");
-      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      ManagerUI.applyNoticeFormState({
+        form,
+        toggle: document.querySelector("[data-manager-notice-toggle]"),
+        open: false,
+      });
+      // The form (and its output) is now hidden, so publish feedback must go
+      // to the always-visible notices status region instead.
+      if (status) setStatus(status, "");
 
       const refreshed = await loadManagerNotices({
         successMessage: "Notice published successfully.",
       });
+
       if (!refreshed) {
         setStatus(
-          status,
-          "Notice published successfully, but the notice list could not be refreshed.",
+          document.querySelector("[data-manager-notices-status]"),
+          "Notice published successfully, but the notice list could not be refreshed. Reload the page to see the new notice.",
           true
         );
-      } else {
-        setStatus(status, "Notice published successfully.");
       }
     } catch (error) {
       console.warn("Could not publish manager notice:", error);
+      // Keep the typed title and body so the manager can retry.
       setStatus(
         status,
         "Could not publish notice: " + (error.message || "Unknown error"),
         true
       );
     } finally {
-      if (submit) submit.disabled = false;
+      form.dataset.busy = "false";
+      ManagerUI.unlockAction(submit);
     }
   }
 
@@ -4698,18 +4775,29 @@
   }
 
   async function moderateManagerReview(reviewId, action, button) {
-    if (!reviewId || (action !== "approve" && action !== "hide")) return;
+    if (!reviewId || (action !== "approve" && action !== "hide") || !button) {
+      return;
+    }
 
     const card = button.closest("[data-manager-review]");
     const buttons = card ? Array.from(card.querySelectorAll("button")) : [button];
-    const status = document.querySelector("[data-manager-reviews-status]");
+
+    // Refuse a second request while this card is already being moderated.
+    if (!ManagerUI.lockAction(button)) return;
     buttons.forEach((item) => {
-      item.disabled = true;
+      if (item !== button) ManagerUI.lockAction(item);
     });
+
+    const status = document.querySelector("[data-manager-reviews-status]");
     setStatus(
       status,
       action === "approve" ? "Approving feedback…" : "Hiding feedback…"
     );
+
+    const message = action === "approve"
+      ? "Feedback approved."
+      : "Feedback hidden.";
+    let refreshed = false;
 
     try {
       if (action === "approve") {
@@ -4718,17 +4806,14 @@
         await MC.hideReview(reviewId);
       }
 
-      const message = action === "approve"
-        ? "Feedback approved."
-        : "Feedback hidden.";
-      const refreshed = await loadManagerReviews({ successMessage: message });
-      if (!refreshed && status) {
-        setStatus(
-          status,
-          message + " The review list could not be refreshed. " + status.textContent,
-          true
-        );
-      }
+      refreshed = await loadManagerReviews();
+      setStatus(
+        status,
+        refreshed
+          ? message
+          : message + " The review list could not be refreshed. Reload the page to confirm the change.",
+        !refreshed
+      );
     } catch (error) {
       console.warn("Could not moderate manager feedback:", error);
       setStatus(
@@ -4736,9 +4821,12 @@
         "Could not " + action + " feedback: " + (error.message || "Unknown error"),
         true
       );
-      buttons.forEach((item) => {
-        item.disabled = false;
-      });
+    } finally {
+      // A successful refresh replaces these nodes; otherwise let the
+      // manager retry instead of leaving the card permanently disabled.
+      if (!refreshed) {
+        buttons.forEach((item) => ManagerUI.unlockAction(item));
+      }
     }
   }
 
@@ -5017,6 +5105,7 @@
         message: "New consultation session scheduled for " + docName + " on " + sessionDate + " (" + startTime.slice(0, 5) + " - " + endTime.slice(0, 5) + ").",
       });
 
+      invalidateManagerDashboard();
       void loadManagerSessions();
       state.sessionsLoaded = false;
       void loadSessions();
@@ -5432,6 +5521,7 @@
       const btn = event.target.closest("[data-refresh-sessions]");
       btn.disabled = true;
       try {
+        invalidateManagerDashboard();
         await loadManagerSessions();
       } finally {
         btn.disabled = false;
@@ -5450,6 +5540,7 @@
             title: "Session delayed",
             message: "Session delayed by 15 minutes. Booked patients notified.",
           });
+          invalidateManagerDashboard();
           await loadManagerSessions();
           state.sessionsLoaded = false;
           void loadSessions();
@@ -5476,6 +5567,7 @@
             title: "Session cancelled",
             message: "Session cancelled. Booked patients notified.",
           });
+          invalidateManagerDashboard();
           await loadManagerSessions();
           state.sessionsLoaded = false;
           void loadSessions();
@@ -5597,21 +5689,24 @@
     if (noticeToggle) {
       const form = document.querySelector("[data-manager-notice-form]");
       if (form) {
-        form.hidden = !form.hidden;
-        noticeToggle.setAttribute("aria-expanded", String(!form.hidden));
-        if (!form.hidden) {
-          const title = form.elements.title;
-          if (title) title.focus();
-        }
+        ManagerUI.applyNoticeFormState({
+          form,
+          toggle: noticeToggle,
+          open: form.hidden,
+        });
       }
       return;
     }
 
     if (event.target.closest("[data-manager-notice-cancel]")) {
       const form = document.querySelector("[data-manager-notice-form]");
-      if (form) form.hidden = true;
-      const toggle = document.querySelector("[data-manager-notice-toggle]");
-      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      if (form) {
+        ManagerUI.applyNoticeFormState({
+          form,
+          toggle: document.querySelector("[data-manager-notice-toggle]"),
+          open: false,
+        });
+      }
       setStatus(document.querySelector("[data-manager-notice-status]"), "");
       return;
     }
