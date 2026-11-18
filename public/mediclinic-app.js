@@ -2369,8 +2369,65 @@
     }
   }
 
+  function confirmAppointmentCancel(appointmentId) {
+    const notice = $("app-session-warning");
+    if (!notice) return Promise.resolve(false);
+
+    const appointment = (Array.isArray(state.appointments) ? state.appointments : [])
+      .concat(Array.isArray(state.manager && state.manager.reception) ? state.manager.reception : [])
+      .find((item) => item && String(item.appointmentId) === String(appointmentId));
+
+    return new Promise((resolve) => {
+      notice.hidden = false;
+      notice.className =
+        "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-rose-200 bg-white px-4 py-3 text-sm text-ink shadow-lg";
+      notice.replaceChildren();
+
+      const wrap = el("div", "flex flex-wrap items-center gap-2 sm:gap-3");
+      const message = appointment
+        ? "Cancel appointment " +
+          referenceOf(appointment.bookingReference) +
+          (appointment.doctorName ? " with " + doctorName(appointment) : "") +
+          "? This cannot be undone."
+        : "Cancel this appointment? This cannot be undone.";
+      wrap.append(el("span", "font-medium text-slate2", message));
+
+      const yes = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-600 border-rose-600 text-white hover:bg-rose-700 min-h-9 px-3 py-1.5 text-xs",
+        "Yes"
+      );
+      yes.type = "button";
+      const no = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs",
+        "No"
+      );
+      no.type = "button";
+
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        yes.disabled = true;
+        no.disabled = true;
+        notice.replaceChildren();
+        notice.className =
+          "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg";
+        notice.hidden = true;
+        resolve(value);
+      };
+
+      yes.addEventListener("click", () => finish(true));
+      no.addEventListener("click", () => finish(false));
+      wrap.append(yes, no);
+      notice.append(wrap);
+    });
+  }
+
   async function cancelAppointment(appointmentId) {
-    if (!window.confirm("Cancel this appointment?")) return;
+    const confirmed = await confirmAppointmentCancel(appointmentId);
+    if (!confirmed) return;
 
     try {
       await MC.cancelAppointment(appointmentId);
@@ -6477,7 +6534,7 @@
 
     const cancel = event.target.closest("[data-cancel-appointment]");
     if (cancel) {
-      void cancelAppointment(cancel.dataset.cancelAppointment);
+      void cancelAppointment(cancel.dataset.cancelAppointment, cancel);
       return;
     }
 
