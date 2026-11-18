@@ -278,9 +278,16 @@ async function main() {
 
     const { response } = await request("/mediclinic-system.html");
     const csp = response.headers.get("content-security-policy") || "";
+    const websocketOrigin = new URL(body.websocketUrl).origin;
+    const connectSrc = csp
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("connect-src "));
+    const allowedOrigins = connectSrc ? connectSrc.split(/\s+/).slice(1) : [];
+
     assert(
-      /connect-src[^;]*wss:\/\//.test(csp),
-      "CSP allows the realtime WebSocket origin"
+      allowedOrigins.includes(websocketOrigin),
+      "CSP allows the configured realtime WebSocket origin"
     );
   }
 

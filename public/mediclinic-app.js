@@ -4475,7 +4475,7 @@
     );
     button.type = "button";
     button.dataset.reviewAction = action;
-    button.dataset.reviewId = String(review.reviewId);
+    button.dataset.reviewId = String(review.id);
     return button;
   }
 
@@ -4486,8 +4486,8 @@
     );
     card.dataset.managerReview = "";
 
-    const status = typeof review.moderationStatus === "string"
-      ? review.moderationStatus.trim().toUpperCase()
+    const status = typeof review.status === "string"
+      ? review.status.trim().toUpperCase()
       : "";
     const heading = el("div", "flex flex-wrap items-center justify-between gap-2");
     const rating = Number(review.rating);
@@ -4527,7 +4527,7 @@
     footer.append(created);
 
     const actions = el("div", "flex flex-wrap gap-2");
-    if (typeof review.reviewId === "string" && review.reviewId) {
+    if (typeof review.id === "string" && review.id) {
       if (status !== "APPROVED") {
         actions.append(managerReviewActionButton(review, "approve", "Approve"));
       }
@@ -4548,7 +4548,7 @@
     const header = el("div", "flex flex-wrap items-center justify-between gap-2");
     header.append(el("h3", "font-semibold text-ink", notice.title || "Untitled notice"));
     header.append(
-      badge(notice.published ? "Published" : "Draft", notice.published ? "green" : "slate")
+      badge(notice.active ? "Published" : "Draft", notice.active ? "green" : "slate")
     );
     card.append(header);
     card.append(
@@ -4625,7 +4625,7 @@
     setStatus(status, "Publishing notice…");
 
     try {
-      await MC.createNotice({ title, body, published: true });
+      await MC.createNotice({ title, body, active: true });
       form.reset();
       form.hidden = true;
       const toggle = document.querySelector("[data-manager-notice-toggle]");

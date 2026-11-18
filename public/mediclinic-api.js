@@ -224,7 +224,7 @@
     },
 
     managerNotices() {
-      return request("notices/manage");
+      return request("manager/notices");
     },
 
     createNotice(payload) {
@@ -235,20 +235,20 @@
     },
 
     managerReviews() {
-      return request("reviews/manage");
+      return request("feedback/moderation");
     },
 
     approveReview(reviewId) {
       return request(
-        "reviews/" + encodeURIComponent(reviewId) + "/approve",
-        { method: "PATCH" }
+        "feedback/moderation/" + encodeURIComponent(reviewId),
+        { method: "PATCH", body: { status: "APPROVED" } }
       );
     },
 
     hideReview(reviewId) {
       return request(
-        "reviews/" + encodeURIComponent(reviewId) + "/hide",
-        { method: "PATCH" }
+        "feedback/moderation/" + encodeURIComponent(reviewId),
+        { method: "PATCH", body: { status: "HIDDEN" } }
       );
     },
 
