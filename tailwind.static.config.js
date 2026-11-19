@@ -1,0 +1,27 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./public/mediclinic-system.html",
+    "./public/mediclinic-app.js",
+    "./public/mediclinic-manager.js",
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', "system-ui", "sans-serif"],
+      },
+      colors: {
+        brand: { DEFAULT: "#2B7A9E", d: "#236583" },
+        peach: { DEFAULT: "#E8734A", d: "#D65E34" },
+        ok: "#38A169",
+        bad: "#E53E3E",
+        snow: "#F7F9FA",
+        line: "#E2E8F0",
+        ink: "#1A202C",
+        slate2: "#4A5568",
+        mute: "#718096",
+      },
+    },
+  },
+  plugins: [],
+};

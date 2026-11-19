@@ -57,8 +57,8 @@ async function main() {
     const { response, text } = await request("/mediclinic-system.html");
     assert(response.status === 200, "app HTML returns 200");
     assert(
-      text.includes("/vendor/tailwindcss-3.4.17.js"),
-      "Tailwind is self-hosted"
+      text.includes("/vendor/mediclinic-tailwind.css?v="),
+      "compiled Tailwind CSS is self-hosted"
     );
     assert(
       !text.includes("cdn.tailwindcss.com"),
@@ -147,8 +147,8 @@ async function main() {
 
   console.log("\nAsset caching");
   {
-    const vendor = await request("/vendor/tailwindcss-3.4.17.js");
-    assert(vendor.response.status === 200, "self-hosted Tailwind returns 200");
+    const vendor = await request("/vendor/mediclinic-tailwind.css?v=20261119a");
+    assert(vendor.response.status === 200, "self-hosted Tailwind CSS returns 200");
     assert(
       (vendor.response.headers.get("cache-control") || "").includes("immutable"),
       "versioned vendor asset is immutable"

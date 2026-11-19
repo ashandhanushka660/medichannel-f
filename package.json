@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:static-css": "tailwindcss -c tailwind.static.config.js -i styles/mediclinic-tailwind.css -o public/vendor/mediclinic-tailwind.css --minify",
     "start": "next start",
     "lint": "eslint",
     "test": "node --test \"tests/*.test.mjs\"",

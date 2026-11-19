@@ -2308,19 +2308,16 @@
         ].join(" · ")
       )
     );
+    const typeBadge = badge(
+      session.consultationType === "ONLINE" ? "Online" : "Physical",
+      "blue"
+    );
     const statusBadge = badge(
       session.status === "OPEN" ? "Available" : session.status === "IN_PROGRESS" ? "In progress" : session.status === "COMPLETED" ? "Completed" : session.status === "CANCELLED" ? "Cancelled" : "Not available",
       session.status === "OPEN" ? "green" : session.status === "IN_PROGRESS" ? "orange" : "slate"
     );
     statusBadge.classList.add("mc-motion-status");
-    header.append(
-      names,
-      badge(
-        session.consultationType === "ONLINE" ? "Online" : "Physical",
-        "blue"
-      ),
-      statusBadge
-    );
+    header.append(names, typeBadge, statusBadge);
     if (previousStatus && previousStatus !== currentStatus) {
       animateStateChange(statusBadge);
     }
