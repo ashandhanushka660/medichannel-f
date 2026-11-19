@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Workspace from "@/components/common/workspace";
 
 export default function ConsultationPage() {
@@ -10,12 +11,17 @@ export default function ConsultationPage() {
       <div className="card">
         <h2 className="text-lg font-bold">Private Consultation Room</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          The consultation room becomes available when your doctor starts your
-          online appointment. Chat messages must be private and encrypted.
+          Your room opens when your doctor starts the consultation. Only you and
+          your assigned doctor can read or send messages, and the chat becomes
+          read-only when the consultation ends.
         </p>
         <p className="mt-4 rounded-lg bg-blue-50 p-4 text-sm text-blue-800">
-          WebSocket chat will be enabled after the Spring Boot WebSocket service
-          is implemented.
+          Chat, typing indicators, live status and consultation summaries are
+          available in the{" "}
+          <Link className="font-semibold underline" href="/mediclinic-system.html#consult">
+            full patient consultation window
+          </Link>
+          .
         </p>
       </div>
     </Workspace>

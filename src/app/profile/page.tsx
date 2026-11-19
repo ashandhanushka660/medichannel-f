@@ -9,8 +9,10 @@ type PatientProfile = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  nic: string | null;
   dateOfBirth: string | null;
   gender: string | null;
+  address: string | null;
 };
 
 type ProfileForm = {
@@ -20,6 +22,7 @@ type ProfileForm = {
   nic: string;
   dateOfBirth: string;
   gender: string;
+  address: string;
 };
 
 const emptyForm: ProfileForm = {
@@ -29,6 +32,7 @@ const emptyForm: ProfileForm = {
   nic: "",
   dateOfBirth: "",
   gender: "",
+  address: "",
 };
 
 export default function ProfilePage() {
@@ -49,9 +53,10 @@ export default function ProfilePage() {
           firstName: profile.firstName,
           lastName: profile.lastName,
           phone: profile.phone ?? "",
-          nic: "",
+          nic: profile.nic ?? "",
           dateOfBirth: profile.dateOfBirth ?? "",
           gender: profile.gender ?? "",
+          address: profile.address ?? "",
         });
       })
       .catch((cause: unknown) => {
@@ -79,34 +84,42 @@ export default function ProfilePage() {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   }
 
-  async function createProfile(event: FormEvent<HTMLFormElement>) {
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setMessage("");
+
     const nic = form.nic.trim().toUpperCase();
     if (nic && !/^(?:\d{9}[VX]|\d{12})$/.test(nic)) {
       setError("Enter a valid Sri Lankan NIC number.");
       return;
     }
 
+    const body = {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      phone: form.phone.trim() || null,
+      nic: nic || null,
+      dateOfBirth: form.dateOfBirth || null,
+      gender: form.gender || null,
+      address: form.address.trim() || null,
+    };
+
     setSaving(true);
     try {
       await apiRequest<PatientProfile>("patients/me", {
-        method: "POST",
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName: form.lastName,
-          phone: form.phone || undefined,
-          nic: nic || undefined,
-          dateOfBirth: form.dateOfBirth || undefined,
-          gender: form.gender || undefined,
-        }),
+        method: hasProfile ? "PUT" : "POST",
+        body: JSON.stringify(body),
       });
       setHasProfile(true);
-      setMessage("Your patient profile was created.");
+      setMessage(
+        hasProfile
+          ? "Your patient profile has been updated."
+          : "Your patient profile was created."
+      );
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "Unable to create your profile."
+        cause instanceof Error ? cause.message : "Unable to save your profile."
       );
     } finally {
       setSaving(false);
@@ -117,68 +130,66 @@ export default function ProfilePage() {
     <Workspace
       role="patient"
       title="My Profile"
-      description="View your patient information or complete your profile."
+      description="View and update your patient information."
     >
       <div className="card max-w-2xl">
-        {message && <p role="status" className="mb-4 text-sm text-green-700">{message}</p>}
+        <h2 className="text-lg font-bold">
+          {hasProfile ? "Personal Information" : "Complete Your Patient Profile"}
+        </h2>
+        <p className="mt-2 text-sm text-slate-500">
+          {hasProfile
+            ? "Your details are stored securely and are used for your appointments."
+            : "Your account is registered, but profile setup is still required."}
+        </p>
+
         {loading ? (
-          <p role="status">Loading your profile...</p>
-        ) : hasProfile ? (
-          <>
-            <h2 className="text-lg font-bold">Personal Information</h2>
-            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              <div><dt className="text-slate-500">First name</dt><dd>{form.firstName}</dd></div>
-              <div><dt className="text-slate-500">Last name</dt><dd>{form.lastName}</dd></div>
-              <div><dt className="text-slate-500">Phone</dt><dd>{form.phone || "Not provided"}</dd></div>
-              <div><dt className="text-slate-500">Date of birth</dt><dd>{form.dateOfBirth || "Not provided"}</dd></div>
-              <div><dt className="text-slate-500">Gender</dt><dd>{form.gender || "Not provided"}</dd></div>
-            </dl>
-            <p className="mt-4 text-xs text-slate-500">
-              NIC values are not returned by the backend profile API. Address is not supported by the current backend.
-            </p>
-          </>
+          <p role="status" className="mt-4">Loading your profile...</p>
         ) : (
-          <>
-            <h2 className="text-lg font-bold">Complete Your Patient Profile</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Your account is registered, but profile setup is still required.
-            </p>
-            <form onSubmit={createProfile} className="mt-5 grid gap-4 sm:grid-cols-2">
-              {([
-                ["firstName", "First name", "text"],
-                ["lastName", "Last name", "text"],
-                ["phone", "Phone number", "tel"],
-                ["nic", "Sri Lankan NIC", "text"],
-                ["dateOfBirth", "Date of birth", "date"],
-              ] as const).map(([name, label, type]) => (
-                <label key={name} className="text-sm font-medium">
-                  {label}
-                  <input
-                    className="field"
-                    name={name}
-                    type={type}
-                    value={form[name]}
-                    onChange={update}
-                    required={name === "firstName" || name === "lastName"}
-                  />
-                </label>
-              ))}
-              <label className="text-sm font-medium">
-                Gender
-                <input className="field" name="gender" value={form.gender} onChange={update} />
-              </label>
-              {error && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{error}</p>}
-              {message && <p role="status" className="text-sm text-green-700 sm:col-span-2">{message}</p>}
-              <button className="primary-button sm:col-span-2" disabled={saving}>
-                {saving ? "Saving profile..." : "Create patient profile"}
-              </button>
-            </form>
-            <p className="mt-4 text-xs text-slate-500">
-              The backend does not currently store address information.
-            </p>
-          </>
+          <form onSubmit={saveProfile} className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-medium">
+              First name
+              <input className="field" name="firstName" value={form.firstName} onChange={update} required />
+            </label>
+            <label className="text-sm font-medium">
+              Last name
+              <input className="field" name="lastName" value={form.lastName} onChange={update} required />
+            </label>
+            <label className="text-sm font-medium">
+              Phone number
+              <input className="field" name="phone" type="tel" value={form.phone} onChange={update} />
+            </label>
+            <label className="text-sm font-medium">
+              Sri Lankan NIC
+              <input className="field" name="nic" value={form.nic} onChange={update} maxLength={20} />
+            </label>
+            <label className="text-sm font-medium">
+              Date of birth
+              <input className="field" name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={update} />
+            </label>
+            <label className="text-sm font-medium">
+              Gender
+              <select className="field" name="gender" value={form.gender} onChange={update}>
+                <option value="">Choose</option>
+                <option>Female</option>
+                <option>Male</option>
+                <option>Other</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium sm:col-span-2">
+              Home address
+              <input className="field" name="address" value={form.address} onChange={update} maxLength={500} />
+            </label>
+            {error && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{error}</p>}
+            {message && <p role="status" className="text-sm text-green-700 sm:col-span-2">{message}</p>}
+            <button className="primary-button sm:col-span-2" disabled={saving}>
+              {saving
+                ? "Saving profile..."
+                : hasProfile
+                  ? "Save changes"
+                  : "Create patient profile"}
+            </button>
+          </form>
         )}
-        {error && hasProfile && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
       </div>
     </Workspace>
   );

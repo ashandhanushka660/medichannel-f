@@ -55,6 +55,7 @@
 
   const ACL = {
     appointments: ["CUSTOMER"],
+    profile: ["CUSTOMER"],
     consult: ["CUSTOMER", "DOCTOR"],
     doctor: ["DOCTOR"],
     manager: ["MANAGER"],
@@ -113,6 +114,8 @@
     booking: null,
     appointments: [],
     appointmentsLoaded: false,
+    profile: null,
+    myReviews: [],
     pendingIntent: null,
     publicNoticesLoaded: false,
     publicNotices: [],
@@ -720,6 +723,8 @@
           if (activeView === "appointments") void loadAppointments();
         }, 5000);
       }
+    } else if (id === "profile") {
+      void loadPatientProfile();
     } else if (id === "doctor") {
       void loadDoctorConsole();
       if (!state.doctor.pollTimer) {
@@ -789,6 +794,16 @@
         );
         name.title = S.email || "";
         container.append(name);
+
+        if (S.role === "CUSTOMER") {
+          const profileLink = el(
+            "a",
+            "inline-flex items-center border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+            "My profile"
+          );
+          profileLink.href = "#profile";
+          container.append(profileLink);
+        }
 
         const out = el(
           "button",
@@ -1222,7 +1237,7 @@
 
     if (n.appointmentId) {
       const link = document.createElement("a");
-      link.href = "#consult";
+      link.href = "#consult-" + encodeURIComponent(n.appointmentId);
       link.className =
         "text-xs font-semibold text-brand hover:underline pl-4 mt-0.5 inline-flex items-center gap-1";
       link.textContent = "Open consultation →";
@@ -1969,7 +1984,12 @@
     }
 
     // BR-03: Session capacity check
-    const remaining = Number(session.availableAppointments ?? session.remainingCapacity ?? 1);
+    const remaining = Number(
+      session.remainingAppointments ??
+        session.availableAppointments ??
+        session.remainingCapacity ??
+        1
+    );
     if (remaining <= 0) {
       if (error) {
         error.hidden = false;
@@ -2083,6 +2103,71 @@
           String(b.sessionStartTime || "")
         )
       )[0];
+  }
+
+  function fillPatientProfile(profile) {
+    if (!profile) return;
+    const values = {
+      "profile-first": profile.firstName,
+      "profile-last": profile.lastName,
+      "profile-nic": profile.nic,
+      "profile-dob": profile.dateOfBirth ? String(profile.dateOfBirth).slice(0, 10) : "",
+      "profile-gender": profile.gender,
+      "profile-phone": profile.phone,
+      "profile-address": profile.address,
+    };
+
+    Object.entries(values).forEach(([id, value]) => {
+      const field = $(id);
+      if (!field) return;
+      const text = value == null ? "" : String(value);
+      if (field.tagName === "SELECT" && text && !Array.from(field.options).some((option) => option.value === text)) {
+        const option = el("option", "", text);
+        option.value = text;
+        field.append(option);
+      }
+      field.value = text;
+    });
+  }
+
+  async function loadPatientProfile() {
+    const status = document.querySelector("[data-profile-status]");
+
+    try {
+      const profile = await MC.myProfile();
+      state.profile = profile || null;
+      fillPatientProfile(profile);
+      if (profile) setStatus(status, "");
+      else setStatus(status, "No patient profile has been created for this account yet.", true);
+    } catch (error) {
+      setStatus(status, error.message || "Your profile could not be loaded.", true);
+    }
+  }
+
+  async function savePatientProfile(form) {
+    const status = document.querySelector("[data-profile-status]");
+    const button = form && form.querySelector("[data-profile-submit]");
+    const payload = {
+      firstName: $("profile-first") ? $("profile-first").value.trim() : "",
+      lastName: $("profile-last") ? $("profile-last").value.trim() : "",
+      nic: $("profile-nic") ? $("profile-nic").value.trim() : "",
+      dateOfBirth: $("profile-dob") ? $("profile-dob").value : "",
+      gender: $("profile-gender") ? $("profile-gender").value : "",
+      phone: $("profile-phone") ? $("profile-phone").value.trim() : "",
+      address: $("profile-address") ? $("profile-address").value.trim() : "",
+    };
+
+    if (button) button.disabled = true;
+    try {
+      const saved = await MC.updateMyProfile(payload);
+      state.profile = saved || payload;
+      if (saved) fillPatientProfile(saved);
+      setStatus(status, "Your profile has been updated.");
+    } catch (error) {
+      setStatus(status, error.message || "Your profile could not be saved.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   async function loadAppointments() {
@@ -2240,16 +2325,25 @@
         appointment.acceptanceStatus === "ACCEPTED" ||
         ["IN_CONSULTATION", "COMPLETED", "BOOKED", "ARRIVED"].includes(appointment.status)
       ) {
-        actions.append(
-          actionButton(
-            appointment.status === "COMPLETED"
-              ? "Summary & feedback"
-              : "Open chat",
-            "bg-white border-brand text-brand hover:bg-snow font-semibold",
-            "open-consult",
-            appointment.appointmentId
-          )
+        const online = appointment.consultationType === "ONLINE";
+        const consultLabel =
+          appointment.status === "COMPLETED"
+            ? "Summary & feedback"
+            : online && appointment.status === "IN_CONSULTATION"
+              ? "Join online consultation"
+              : online
+                ? "Open consultation room"
+                : "Open chat";
+        const consultButton = actionButton(
+          consultLabel,
+          "bg-white border-brand text-brand hover:bg-snow font-semibold",
+          "open-consult",
+          appointment.appointmentId
         );
+        if (online && appointment.status === "IN_CONSULTATION") {
+          consultButton.setAttribute("data-join-online", appointment.appointmentId);
+        }
+        actions.append(consultButton);
       }
 
       if (appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
@@ -2262,8 +2356,8 @@
       // that are more than 3 hours before the session. Paid appointments
       // are non-refundable and must be cancelled by a manager/administrator.
       const cancellable =
-        ["BOOKED", "ARRIVED"].includes(appointment.status) &&
-        appointment.paymentStatus !== "PAID" &&
+        appointment.status === "BOOKED" &&
+        appointment.paymentStatus === "PENDING" &&
         canCancel(appointment);
 
       if (cancellable) {
@@ -3829,6 +3923,17 @@
       appointment = state.appointments.find(
         (item) => item.appointmentId === appointmentId
       );
+      if (!appointment) {
+        try {
+          appointment = await MC.myAppointment(appointmentId);
+          if (appointment) {
+            state.appointments = state.appointments || [];
+            state.appointments.push(appointment);
+          }
+        } catch {
+          // The picker and appointment table remain authoritative if this lookup fails.
+        }
+      }
     }
 
     if (!appointment && S && S.role === "DOCTOR") {
@@ -3859,10 +3964,12 @@
     if (layout) layout.hidden = false;
 
     renderConsultHeader(appointment);
+    resetFeedbackForm();
 
     await Promise.allSettled([
       loadChatHistory(appointmentId),
       loadConsultSummary(appointmentId),
+      loadPatientReviewState(appointmentId),
     ]);
 
     subscribeConsultation(appointment);
@@ -4180,6 +4287,7 @@
   async function loadConsultSummary(appointmentId) {
     const empty = document.querySelector("[data-summary-empty]");
     const summary = document.querySelector("[data-summary]");
+    const symptoms = document.querySelector("[data-summary-symptoms]");
     const diagnosis = document.querySelector("[data-summary-diagnosis]");
     const prescription = document.querySelector("[data-summary-prescription]");
     const followup = document.querySelector("[data-summary-followup]");
@@ -4218,6 +4326,7 @@
       if (line) {
         line.textContent = "Consultation completed. Clinical summary and prescription are published above.";
       }
+      if (symptoms) symptoms.textContent = record.symptoms || "Not recorded";
       if (diagnosis) diagnosis.textContent = record.diagnosis || "—";
       if (prescription) {
         prescription.textContent =
@@ -4360,19 +4469,74 @@
     }
   }
 
+  function resetFeedbackForm() {
+    const form = document.querySelector("[data-feedback-form]");
+    const rating = $("consult-rt");
+    const comment = $("consult-fc");
+    const button = form && form.querySelector("button[type=submit]");
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Submit feedback";
+    }
+    if (rating) rating.disabled = false;
+    if (comment) comment.disabled = false;
+    setStatus(document.querySelector("[data-feedback-status]"), "");
+  }
+
+  function markFeedbackSubmitted(message) {
+    const form = document.querySelector("[data-feedback-form]");
+    const rating = $("consult-rt");
+    const comment = $("consult-fc");
+    const button = form && form.querySelector("button[type=submit]");
+    const status = document.querySelector("[data-feedback-status]");
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Feedback submitted";
+    }
+    if (rating) rating.disabled = true;
+    if (comment) comment.disabled = true;
+    setStatus(
+      status,
+      message || "You have already submitted feedback for this consultation."
+    );
+  }
+
+  async function loadPatientReviewState(appointmentId) {
+    if (!S || S.role !== "CUSTOMER") return;
+
+    try {
+      const reviews = await MC.myReviews();
+      state.myReviews = Array.isArray(reviews) ? reviews : [];
+      const submitted = state.myReviews.some(
+        (review) => review.appointmentId === appointmentId
+      );
+      if (submitted) markFeedbackSubmitted();
+    } catch {
+      // Feedback remains protected by the backend's one-review-per-appointment rule.
+    }
+  }
+
   async function submitFeedback() {
     const appointment = state.consult.appointment;
     const rating = $("consult-rt");
     const comment = $("consult-fc");
-    const status = document.querySelector("[data-feedback-status]");
     const form = document.querySelector("[data-feedback-form]");
+    const button = form && form.querySelector("button[type=submit]");
 
     if (!appointment) return;
 
-    if (form) {
-      const button = form.querySelector("button[type=submit]");
-      if (button) button.disabled = true;
+    if (
+      (state.myReviews || []).some(
+        (review) => review.appointmentId === appointment.appointmentId
+      )
+    ) {
+      markFeedbackSubmitted();
+      return;
     }
+
+    if (button) button.disabled = true;
 
     try {
       await MC.submitReview(
@@ -4380,12 +4544,17 @@
         Number(rating ? rating.value : 5),
         comment ? comment.value.trim() : ""
       );
-      setStatus(status, "Thank you — your feedback has been recorded.");
+      state.myReviews = state.myReviews || [];
+      state.myReviews.push({ appointmentId: appointment.appointmentId });
+      markFeedbackSubmitted("Thank you — your feedback has been recorded.");
     } catch (error) {
-      setStatus(status, error.message, true);
-    } finally {
-      if (form) {
-        const button = form.querySelector("button[type=submit]");
+      const duplicate = error.status === 409 || /already|duplicate/i.test(error.message || "");
+      if (duplicate) {
+        state.myReviews = state.myReviews || [];
+        state.myReviews.push({ appointmentId: appointment.appointmentId });
+        markFeedbackSubmitted();
+      } else {
+        setStatus(document.querySelector("[data-feedback-status]"), error.message, true);
         if (button) button.disabled = false;
       }
     }
@@ -7038,6 +7207,13 @@
       return;
     }
 
+    const joinOnline = event.target.closest("[data-join-online]");
+    if (joinOnline) {
+      state.consult.requestedId = joinOnline.getAttribute("data-join-online");
+      nav("consult");
+      return;
+    }
+
     const openConsult = event.target.closest("[data-open-consult]");
     if (openConsult) {
       state.consult.requestedId = openConsult.dataset.openConsult;
@@ -7168,6 +7344,21 @@
     feedbackForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitFeedback();
+    });
+  }
+
+  const profileForm = document.querySelector("[data-profile-form]");
+  if (profileForm) {
+    profileForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void savePatientProfile(profileForm);
+    });
+  }
+
+  const profileRefresh = document.querySelector("[data-profile-refresh]");
+  if (profileRefresh) {
+    profileRefresh.addEventListener("click", () => {
+      void loadPatientProfile();
     });
   }
 

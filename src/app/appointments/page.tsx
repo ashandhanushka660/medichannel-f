@@ -34,6 +34,14 @@ type Appointment = {
   roomNumber: string | null;
 };
 
+function canCancel(appointment: Appointment) {
+  if (!appointment.sessionDate) return false;
+  const start = new Date(
+    `${appointment.sessionDate}T${appointment.sessionStartTime || "00:00"}:00`
+  );
+  return !Number.isNaN(start.getTime()) && Date.now() < start.getTime() - 3 * 60 * 60 * 1000;
+}
+
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -124,6 +132,21 @@ export default function AppointmentsPage() {
       setError(cause instanceof Error ? cause.message : "Unable to book appointment.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function payAppointment(appointmentId: string) {
+    setError("");
+    setMessage("");
+    try {
+      await apiRequest(`appointments/${appointmentId}/payments`, {
+        method: "POST",
+        body: JSON.stringify({ method: "CARD" }),
+      });
+      setMessage("Payment recorded.");
+      await loadData();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to record payment.");
     }
   }
 
@@ -220,25 +243,49 @@ export default function AppointmentsPage() {
                   <p>Payment: {appointment.paymentStatus}</p>
                 </div>
               </div>
-              {["BOOKED", "ARRIVED"].includes(appointment.status) && (
-                <div className="mt-4 flex flex-wrap gap-3">
-                  {appointment.status === "BOOKED" && (
-                    <button className="secondary-button" onClick={() => updateAppointment(appointment.appointmentId, "check-in")}>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {appointment.paymentStatus === "PENDING" &&
+                  ["BOOKED", "ARRIVED"].includes(appointment.status) && (
+                    <button className="secondary-button" onClick={() => void payAppointment(appointment.appointmentId)}>
+                      Pay now
+                    </button>
+                  )}
+                {appointment.consultationType === "PHYSICAL" &&
+                  appointment.status === "BOOKED" &&
+                  appointment.paymentStatus === "PAID" && (
+                    <button className="secondary-button" onClick={() => void updateAppointment(appointment.appointmentId, "check-in")}>
                       Check in
                     </button>
                   )}
-                  {appointment.paymentStatus !== "PAID" && (
-                    <button className="text-sm font-semibold text-red-700" onClick={() => updateAppointment(appointment.appointmentId, "cancel")}>
+                {appointment.status === "BOOKED" &&
+                  appointment.paymentStatus === "PENDING" &&
+                  canCancel(appointment) && (
+                    <button className="text-sm font-semibold text-red-700" onClick={() => void updateAppointment(appointment.appointmentId, "cancel")}>
                       Cancel appointment
                     </button>
                   )}
-                </div>
-              )}
+                {(appointment.status === "IN_CONSULTATION" ||
+                  appointment.status === "COMPLETED") && (
+                  <a
+                    className="text-sm font-semibold text-blue-700 underline"
+                    href={`/mediclinic-system.html#consult-${appointment.appointmentId}`}
+                  >
+                    {appointment.consultationType === "ONLINE" &&
+                    appointment.status === "IN_CONSULTATION"
+                      ? "Join online consultation"
+                      : "Open consultation"}
+                  </a>
+                )}
+              </div>
             </article>
           ))}
         </div>
         <p className="mt-4 text-sm text-slate-500">
-          Live queue position and estimated wait time are not currently exposed by a patient queue API.
+          Follow your live queue number, now-serving update and notifications in the{" "}
+          <a className="font-semibold text-blue-700 underline" href="/mediclinic-system.html#appointments">
+            full patient appointments view
+          </a>
+          .
         </p>
       </section>
 

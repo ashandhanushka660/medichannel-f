@@ -418,6 +418,10 @@
       return request("appointments/me");
     },
 
+    myAppointment(appointmentId) {
+      return request("appointments/" + encodeURIComponent(appointmentId));
+    },
+
     bookAppointment(sessionId, reason) {
       return request("appointments", {
         method: "POST",
@@ -457,6 +461,22 @@
         "appointments/" + encodeURIComponent(appointmentId) + "/review",
         { method: "POST", body: { rating, comment } }
       );
+    },
+
+    myReviews() {
+      return request("reviews/me");
+    },
+
+    // Patient profile -------------------------------------------------
+    myProfile() {
+      return request("patients/me");
+    },
+
+    updateMyProfile(payload) {
+      return request("patients/me", {
+        method: "PUT",
+        body: payload,
+      });
     },
 
     // Chat -----------------------------------------------------------
