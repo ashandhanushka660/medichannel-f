@@ -26,3 +26,20 @@ test("public notice cards list one per row with an author byline", () => {
   assert.doesNotMatch(block, /sm:grid-cols-2/);
   assert.match(block, /"By " \+ String\(notice\.createdByName \|\| "Hospital administration"\)/);
 });
+
+test("public notice cards use the project colour tokens", () => {
+  const start = APP.indexOf("function renderPublicNotices");
+  const block = APP.slice(start, start + 6000);
+
+  // Brand tokens live in the Tailwind config inside mediclinic-system.html:
+  // brand, brand-d, peach, peach-d, ok, bad, snow, line, ink, slate2, mute.
+  assert.doesNotMatch(
+    block,
+    /\b(?:text|bg|border|from|to|ring)-(?:blue|indigo|navy|slate|amber|emerald|gray|zinc|stone|neutral)-/,
+    "public notices must not use Tailwind palette colours outside the project tokens"
+  );
+  assert.doesNotMatch(block, /#[0-9a-f]{6}\b/i, "public notices must not hard-code hex colours");
+  assert.match(block, /text-brand-d/);
+  assert.match(block, /bg-brand-d/);
+  assert.match(block, /border-line/);
+});

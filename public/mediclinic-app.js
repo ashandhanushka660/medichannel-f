@@ -1551,7 +1551,7 @@
 
     if (status) {
       status.hidden = false;
-      status.className = "text-base sm:text-lg " + (usingSample ? "text-amber-800" : "text-slate2");
+      status.className = "text-base sm:text-lg " + (usingSample ? "text-peach-d" : "text-slate2");
       status.textContent = usingSample
         ? "Showing SAMPLE NOTICES (demo content). Real published notices from hospital administration will appear here when available."
         : "Latest notices published by hospital administration.";
@@ -1561,13 +1561,13 @@
       const isSampleNotice = usingSample || Boolean(notice && notice.sample);
       const card = el(
         "article",
-        "relative overflow-hidden rounded-lg border border-[#e2e8f0] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.10)] transition-shadow hover:shadow-md"
+        "relative overflow-hidden rounded-lg border border-line bg-white shadow-sm transition-shadow hover:shadow-md"
       );
 
       const accent = el(
         "span",
         "pointer-events-none absolute inset-y-0 left-0 w-1.5 " +
-          (isSampleNotice ? "bg-amber-400" : "bg-[#1f3864]")
+          (isSampleNotice ? "bg-peach" : "bg-brand-d")
       );
       accent.setAttribute("aria-hidden", "true");
       card.append(accent);
@@ -1586,7 +1586,7 @@
         badges.append(
           el(
             "span",
-            "inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800",
+            "inline-flex items-center rounded border border-peach/40 bg-peach/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-peach-d",
             "Sample notice"
           )
         );
@@ -1596,7 +1596,7 @@
       const updatedOn = formatNoticeDate(notice.updatedAt);
       const dates = el(
         "div",
-        "ml-auto text-right text-xs leading-6 text-[#94a3b8] sm:text-sm"
+        "ml-auto text-right text-xs leading-6 text-mute sm:text-sm"
       );
       if (publishedOn) dates.append(el("p", "", "Published: " + publishedOn));
       if (updatedOn && updatedOn !== publishedOn) {
@@ -1608,7 +1608,7 @@
       inner.append(
         el(
           "h3",
-          "break-words text-xl font-bold leading-snug text-[#1b4fd8] sm:text-[26px]",
+          "break-words text-xl font-bold leading-snug text-brand-d sm:text-[26px]",
           notice.title || "Hospital notice"
         )
       );
@@ -1617,7 +1617,7 @@
         inner.append(
           el(
             "p",
-            "whitespace-pre-line break-words text-base leading-7 text-[#4b5563] sm:text-[17px] sm:leading-8",
+            "whitespace-pre-line break-words text-base leading-7 text-slate2 sm:text-[17px] sm:leading-8",
             notice.body
           )
         );
@@ -1625,7 +1625,7 @@
 
       const footer = el(
         "div",
-        "mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] pt-3"
+        "mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3"
       );
       const tags = el("div", "flex flex-wrap items-center gap-2");
       tags.append(
@@ -1633,15 +1633,15 @@
           "span",
           "inline-flex items-center rounded px-2.5 py-1 text-xs font-semibold " +
             (isSampleNotice
-              ? "bg-amber-100 text-amber-900"
-              : "bg-[#e8f0fe] text-[#1b4fd8]"),
+              ? "bg-peach/10 text-peach-d"
+              : "bg-brand/10 text-brand-d"),
           isSampleNotice ? "Demo content" : "Hospital update"
         )
       );
       tags.append(
         el(
           "span",
-          "inline-flex items-center rounded bg-[#f1f5f9] px-2.5 py-1 text-xs font-semibold text-[#475569]",
+          "inline-flex items-center rounded bg-snow px-2.5 py-1 text-xs font-semibold text-slate2",
           "Patients & visitors"
         )
       );
@@ -1649,7 +1649,7 @@
         tags,
         el(
           "p",
-          "text-sm font-bold text-[#0f172a]",
+          "text-sm font-bold text-ink",
           "By " + String(notice.createdByName || "Hospital administration")
         )
       );
