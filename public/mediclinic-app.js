@@ -351,6 +351,37 @@
     return wakePromise;
   }
 
+  function isServiceUnavailable(error) {
+    const status = Number(error && error.status);
+    return status === 502 || status === 503 || status === 504;
+  }
+
+  /**
+   * Retries a backend call once after waking the hosted service. Render-style
+   * free tiers sleep when idle, so the first request can fail with a 502/503
+   * even though the action will succeed a few seconds later.
+   */
+  async function callWithWakeRetry(task, options) {
+    const settings = options || {};
+    try {
+      return await task();
+    } catch (error) {
+      if (!isServiceUnavailable(error)) throw error;
+      const awake = await wakeBackend();
+      if (!awake) {
+        throw new Error(
+          "The hospital service is still starting. Please wait a moment and try again."
+        );
+      }
+      if (!settings.retry) {
+        throw new Error(
+          "The hospital service was starting up. Please try that action again."
+        );
+      }
+      return task();
+    }
+  }
+
   // ---------------------------------------------------------------
   // Routing and panels
   // ---------------------------------------------------------------
@@ -3051,6 +3082,78 @@
     return button;
   }
 
+  function findDoctorAppointment(appointmentId) {
+    const pools = [
+      state.doctor.queue && state.doctor.queue.appointments,
+      state.doctor.allAppointments,
+      state.doctor.sessionAppointments,
+      state.consult.list,
+    ];
+    for (const pool of pools) {
+      if (!Array.isArray(pool)) continue;
+      const match = pool.find(
+        (item) => item && String(item.appointmentId) === String(appointmentId)
+      );
+      if (match) return match;
+    }
+    return null;
+  }
+
+  /**
+   * Opening the chat is the doctor's signal that the online consultation room
+   * may open. Start the appointment first (BR-09) so the patient's room unlocks
+   * in real time, then continue to the chat window.
+   */
+  async function ensureDoctorConsultationStarted(appointmentOrId) {
+    if (!S || S.role !== "DOCTOR") return;
+
+    const appointment =
+      typeof appointmentOrId === "string"
+        ? findDoctorAppointment(appointmentOrId)
+        : appointmentOrId;
+
+    if (!appointment) return;
+    if (!["BOOKED", "ARRIVED"].includes(appointment.status)) return;
+    if (appointment.consultationType !== "ONLINE") return;
+    if (appointment.paymentStatus !== "PAID") return;
+
+    try {
+      await callWithWakeRetry(
+        () => MC.startConsultation(appointment.appointmentId),
+        { retry: true }
+      );
+    } catch (error) {
+      // A retry after a lost response can report "already started"; treat that
+      // as success, otherwise surface why the room cannot open yet.
+      if (!error || error.status !== 409) {
+        if (!isServiceUnavailable(error)) setAppMessage(error.message);
+        return;
+      }
+    }
+
+    appointment.status = "IN_CONSULTATION";
+
+    if (state.doctor.queue && Array.isArray(state.doctor.queue.appointments)) {
+      const row = state.doctor.queue.appointments.find(
+        (item) => String(item.appointmentId) === String(appointment.appointmentId)
+      );
+      if (row) row.status = "IN_CONSULTATION";
+    }
+
+    if (
+      state.consult.appointment &&
+      String(state.consult.appointment.appointmentId) ===
+        String(appointment.appointmentId)
+    ) {
+      state.consult.appointment.status = "IN_CONSULTATION";
+      renderConsultHeader(state.consult.appointment);
+    }
+
+    if (activeView === "doctor") {
+      void loadDoctorQueue(state.doctor.sessionId);
+    }
+  }
+
   async function runDoctorAction(name, appointmentId, button) {
     if (button) button.disabled = true;
 
@@ -3110,6 +3213,7 @@
       } else if (name === "notes" || name === "chat") {
         if (button) button.disabled = false;
         if (name === "chat") {
+          await ensureDoctorConsultationStarted(appointmentId);
           state.consult.requestedId = appointmentId;
           nav("consult");
           setTimeout(async () => {
@@ -3402,15 +3506,17 @@
     const isOnline = appointment.consultationType === "ONLINE";
     if (chatLink) {
       chatLink.hidden = !isOnline;
-      chatLink.onclick = (e) => {
+      chatLink.onclick = async (e) => {
         e.preventDefault();
+        await ensureDoctorConsultationStarted(appointment);
         state.consult.requestedId = appointment.appointmentId;
         nav("consult");
       };
     }
     if (chatBtn) {
       chatBtn.hidden = !isOnline;
-      chatBtn.onclick = () => {
+      chatBtn.onclick = async () => {
+        await ensureDoctorConsultationStarted(appointment);
         state.consult.requestedId = appointment.appointmentId;
         nav("consult");
       };
@@ -3735,7 +3841,7 @@
         ? "Type a message…"
         : appointment.status === "COMPLETED"
           ? "This consultation has ended (read-only)"
-          : "Chat opens when doctor starts consultation";
+          : "Waiting for your doctor to open the chat…";
     }
 
     if (send) send.disabled = !active || !participant;
@@ -3746,10 +3852,10 @@
           "Messages are stored securely. The doctor can complete the consultation at any time.";
       } else if (appointment.status === "COMPLETED") {
         note.textContent =
-          "This consultation has ended, so the chat is read-only (BR-09). The summary remains available.";
+          "This consultation has ended, so the chat is read-only. Your summary remains available.";
       } else {
         note.textContent =
-          "The consultation has not started yet. Real-time chat opens when the doctor starts the consultation (BR-09).";
+          "Your consultation room is private to you and your doctor. It unlocks automatically here as soon as your doctor opens the chat.";
       }
     }
 
@@ -5080,6 +5186,8 @@
   const adminNoticeState = {
     editingId: null,
     editingPublished: true,
+    page: 1,
+    pageSize: 6,
   };
 
   function setAdminNoticeFormMode(mode, notice) {
@@ -5114,32 +5222,49 @@
   }
 
   function renderAdminNotice(notice) {
+    const published = Boolean(notice.published);
     const card = el(
       "article",
-      "grid gap-3 rounded-lg border border-line bg-white p-3 sm:p-4"
+      "grid gap-3 rounded-xl border border-line bg-white p-4 shadow-sm transition hover:shadow-md " +
+        (published
+          ? "border-l-4 border-l-emerald-400"
+          : "border-l-4 border-l-slate-300")
     );
     card.dataset.adminNotice = notice.id || "";
 
-    const header = el("div", "flex flex-wrap items-center justify-between gap-2");
-    header.append(el("h3", "font-semibold text-ink", notice.title || "Untitled notice"));
+    const header = el("div", "flex flex-wrap items-start justify-between gap-2");
     header.append(
-      badge(notice.published ? "Published" : "Draft", notice.published ? "green" : "slate")
+      el(
+        "h3",
+        "min-w-0 break-words text-base font-semibold leading-snug text-ink",
+        notice.title || "Untitled notice"
+      )
     );
+    header.append(badge(published ? "Published" : "Draft", published ? "green" : "slate"));
     card.append(header);
 
     card.append(
-      el("p", "text-sm text-slate2 whitespace-pre-wrap break-words", notice.body || "")
+      el(
+        "p",
+        "whitespace-pre-wrap break-words text-sm leading-relaxed text-slate2",
+        notice.body || ""
+      )
     );
 
-    const metaParts = [];
-    if (notice.publishedAt) metaParts.push("Published " + formatDateTime(notice.publishedAt));
-    else if (notice.createdAt) metaParts.push("Created " + formatDateTime(notice.createdAt));
-    if (notice.createdByName) metaParts.push(String(notice.createdByName));
-    if (metaParts.length) {
-      card.append(el("p", "text-xs text-mute", metaParts.join(" · ")));
+    const meta = el("div", "flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mute");
+    if (notice.publishedAt) {
+      meta.append(el("span", "", "Published " + formatDateTime(notice.publishedAt)));
+    } else if (notice.createdAt) {
+      meta.append(el("span", "", "Created " + formatDateTime(notice.createdAt)));
     }
+    if (notice.createdByName) {
+      meta.append(
+        el("span", "inline-flex items-center rounded-full bg-snow px-2 py-0.5 font-medium text-slate2", String(notice.createdByName))
+      );
+    }
+    if (meta.childNodes.length) card.append(meta);
 
-    const actions = el("div", "flex flex-wrap gap-2 pt-1");
+    const actions = el("div", "mt-1 flex flex-wrap items-center gap-2 border-t border-line pt-3");
     const editBtn = el("button", "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs", "Edit");
     editBtn.type = "button";
     editBtn.dataset.adminNoticeAction = "edit";
@@ -5284,7 +5409,7 @@
       listStatus.setAttribute("aria-live", "polite");
       listStatus.className = "block text-sm text-slate2";
       listStatus.textContent = "Loading notices…";
-      const list = el("div", "grid gap-3");
+      const list = el("div", "grid gap-4 md:grid-cols-2");
       list.dataset.adminNotices = "";
       list.addEventListener("click", (event) => {
         const button = event.target.closest("button[data-admin-notice-action]");
@@ -5305,13 +5430,104 @@
           void handleAdminNoticeAction(action, noticeId, button);
         }
       });
-      listCard.append(listStatus, list);
+
+      const pagination = el(
+        "nav",
+        "flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3",
+      );
+      pagination.dataset.adminNoticesPagination = "";
+      pagination.setAttribute("aria-label", "Notice pages");
+      pagination.hidden = true;
+      pagination.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-admin-notices-page]");
+        if (!button || button.disabled) return;
+        const notices = Array.isArray(state.adminNotices) ? state.adminNotices : [];
+        const pages = Math.max(1, Math.ceil(notices.length / adminNoticeState.pageSize));
+        const direction = button.dataset.adminNoticesPage;
+        const nextPage =
+          direction === "next"
+            ? adminNoticeState.page + 1
+            : direction === "previous"
+              ? adminNoticeState.page - 1
+              : adminNoticeState.page;
+        adminNoticeState.page = Math.min(Math.max(1, nextPage), pages);
+        renderAdminNoticesPage();
+      });
+
+      listCard.append(listStatus, list, pagination);
 
       panel.append(card, listCard);
       main.append(panel);
     }
 
     return true;
+  }
+
+  function renderAdminNoticesPage() {
+    const container = document.querySelector("[data-admin-notices]");
+    const pagination = document.querySelector("[data-admin-notices-pagination]");
+    if (!container) return;
+
+    const notices = Array.isArray(state.adminNotices) ? state.adminNotices : [];
+    const size = adminNoticeState.pageSize;
+    const pages = Math.max(1, Math.ceil(notices.length / size));
+    const page = Math.min(Math.max(1, adminNoticeState.page), pages);
+    adminNoticeState.page = page;
+
+    const start = notices.length ? (page - 1) * size : 0;
+    const end = Math.min(start + size, notices.length);
+    container.replaceChildren(...notices.slice(start, end).map(renderAdminNotice));
+
+    if (!pagination) return;
+
+    if (notices.length <= size) {
+      pagination.hidden = true;
+      pagination.replaceChildren();
+      return;
+    }
+
+    pagination.hidden = false;
+
+    const label = el(
+      "p",
+      "text-xs text-mute",
+      "Showing " +
+        (start + 1) +
+        "–" +
+        end +
+        " of " +
+        notices.length +
+        " notices"
+    );
+
+    const controls = el("div", "flex items-center gap-2");
+
+    const previous = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed min-h-9 px-3 py-1.5 text-xs",
+      "Previous"
+    );
+    previous.type = "button";
+    previous.dataset.adminNoticesPage = "previous";
+    previous.disabled = page <= 1;
+
+    const indicator = el(
+      "span",
+      "px-1 text-xs font-semibold text-slate2",
+      "Page " + page + " of " + pages
+    );
+
+    const next = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed min-h-9 px-3 py-1.5 text-xs",
+      "Next"
+    );
+    next.type = "button";
+    next.dataset.adminNoticesPage = "next";
+    next.disabled = page >= pages;
+
+    controls.append(previous, indicator, next);
+    pagination.replaceChildren(label, controls);
   }
 
   async function loadAdminNotices(options) {
@@ -5322,15 +5538,23 @@
 
     const settings = options || {};
     container.replaceChildren();
+    const pagination = document.querySelector("[data-admin-notices-pagination]");
+    if (pagination) pagination.hidden = true;
     setStatus(status, "Loading notices…");
 
     try {
-      const notices = await MC.managerNotices();
+      const notices = await callWithWakeRetry(() => MC.managerNotices(), {
+        retry: true,
+      });
       if (!Array.isArray(notices)) {
         throw new Error("The notice service returned an invalid response.");
       }
 
       state.adminNotices = notices;
+      if (typeof settings.page === "number") {
+        adminNoticeState.page = settings.page;
+      }
+      renderAdminNoticesPage();
 
       if (notices.length === 0) {
         setStatus(
@@ -5342,7 +5566,6 @@
         return true;
       }
 
-      container.replaceChildren(...notices.map(renderAdminNotice));
       setStatus(
         status,
         settings.successMessage || "Showing " + notices.length + " notices."
@@ -5351,6 +5574,7 @@
     } catch (error) {
       console.warn("Could not load admin notices:", error);
       state.adminNotices = [];
+      if (pagination) pagination.hidden = true;
       setStatus(
         status,
         "Could not load notices: " + (error.message || "Unknown error"),
@@ -5389,14 +5613,19 @@
 
     try {
       if (editingId) {
-        await MC.updateNotice(editingId, payload);
+        await callWithWakeRetry(() => MC.updateNotice(editingId, payload), {
+          retry: true,
+        });
       } else {
-        await MC.createNotice(payload);
+        await callWithWakeRetry(() => MC.createNotice(payload), {
+          retry: false,
+        });
       }
 
       setAdminNoticeFormMode("create");
       const refreshed = await loadAdminNotices({
         successMessage: editingId ? "Notice updated successfully." : "Notice published successfully.",
+        page: 1,
       });
       if (!refreshed) {
         setStatus(
@@ -5500,14 +5729,20 @@
 
     try {
       if (action === "delete") {
-        await MC.deleteNotice(id);
+        try {
+          await callWithWakeRetry(() => MC.deleteNotice(id), { retry: true });
+        } catch (error) {
+          // A retry after a lost response reports 404 because the first request
+          // already deleted the notice. That outcome still matches the intent.
+          if (!error || error.status !== 404) throw error;
+        }
         if (String(adminNoticeState.editingId || "") === id) {
           setAdminNoticeFormMode("create");
         }
       } else if (action === "publish") {
-        await MC.publishNotice(id);
+        await callWithWakeRetry(() => MC.publishNotice(id), { retry: true });
       } else if (action === "withdraw") {
-        await MC.withdrawNotice(id);
+        await callWithWakeRetry(() => MC.withdrawNotice(id), { retry: true });
       } else {
         throw new Error("Unsupported notice action.");
       }

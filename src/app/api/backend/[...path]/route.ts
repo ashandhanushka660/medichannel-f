@@ -49,9 +49,15 @@ async function forwardRequest(
     });
 
     const responseBody = await backendResponse.text();
+    const status = backendResponse.status;
 
-    return new NextResponse(responseBody, {
-      status: backendResponse.status,
+    // 204/205/304 responses must not carry a body: passing "" to the Response
+    // constructor throws "Invalid response status code", which previously
+    // turned a successful DELETE into a 502 "backend unreachable" error.
+    const bodyless = status === 204 || status === 205 || status === 304;
+
+    return new NextResponse(bodyless ? null : responseBody, {
+      status,
       headers: {
         "Content-Type":
           backendResponse.headers.get("content-type") ||

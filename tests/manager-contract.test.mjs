@@ -96,7 +96,12 @@ test("dashboard no longer derives active doctors from the public sessions feed",
 });
 
 test("notice and review rendering use the backend field names", () => {
-  assert.match(APP, /badge\(notice\.published \?/);
+  const noticeStart = APP.indexOf("function renderAdminNotice");
+  assert.ok(noticeStart > -1, "renderAdminNotice is missing");
+  const noticeBlock = APP.slice(noticeStart, noticeStart + 1600);
+
+  assert.match(noticeBlock, /Boolean\(notice\.published\)/);
+  assert.match(noticeBlock, /badge\(published \?/);
   assert.doesNotMatch(APP, /notice\.active/);
   assert.match(APP, /review\.reviewId/);
   assert.match(APP, /review\.moderationStatus/);
