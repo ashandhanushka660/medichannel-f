@@ -166,3 +166,28 @@ test("the empty chat placeholder addresses each role correctly", () => {
   assert.match(APP_SOURCE, /No messages yet\. Say hello to your patient\./);
   assert.match(APP_SOURCE, /No messages yet\. Say hello to your doctor\./);
 });
+
+test("an unpaid online consultation explains why the room stays locked", () => {
+  assert.doesNotMatch(APP_SOURCE, /if \(appointment\.paymentStatus !== "PAID"\) return;/);
+  assert.match(
+    APP_SOURCE,
+    /This room stays locked until the appointment payment is recorded\./
+  );
+  assert.match(
+    APP_SOURCE,
+    /It unlocks once payment is recorded and your doctor opens the chat\./
+  );
+});
+
+test("every doctor entry path starts the online consultation", () => {
+  assert.match(APP_SOURCE, /await ensureDoctorConsultationStarted\(appointment\);/);
+  assert.match(APP_SOURCE, /await ensureDoctorConsultationStarted\(appointmentId\);/);
+  assert.match(APP_SOURCE, /await ensureDoctorConsultationStarted\(appointment\);\n\s*state\.consult\.requestedId/);
+});
+
+test("a 409 from startConsultation is verified against the server, not treated as success", () => {
+  assert.doesNotMatch(APP_SOURCE, /if \(!error \|\| error\.status !== 409\)/);
+  assert.match(APP_SOURCE, /await loadDoctorQueue\(state\.doctor\.sessionId, \{ silent: true \}\);/);
+  assert.match(APP_SOURCE, /if \(!fresh \|\| fresh\.status !== "IN_CONSULTATION"\)/);
+  assert.match(APP_SOURCE, /return true;\n  \}\n\n  async function runDoctorAction/);
+});

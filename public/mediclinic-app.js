@@ -3305,17 +3305,26 @@
    * in real time, then continue to the chat window.
    */
   async function ensureDoctorConsultationStarted(appointmentOrId) {
-    if (!S || S.role !== "DOCTOR") return;
+    if (!S || S.role !== "DOCTOR") return false;
 
     const appointment =
       typeof appointmentOrId === "string"
         ? findDoctorAppointment(appointmentOrId)
         : appointmentOrId;
 
-    if (!appointment) return;
-    if (!["BOOKED", "ARRIVED"].includes(appointment.status)) return;
-    if (appointment.consultationType !== "ONLINE") return;
-    if (appointment.paymentStatus !== "PAID") return;
+    if (!appointment) return false;
+    if (!["BOOKED", "ARRIVED"].includes(appointment.status)) return false;
+    if (appointment.consultationType !== "ONLINE") return false;
+
+    // A locked room without an explanation looks like a frozen chat. Tell the
+    // doctor exactly what is still missing instead of silently returning.
+    if (appointment.paymentStatus !== "PAID") {
+      setAppMessage(
+        "This room stays locked until the appointment payment is recorded.",
+        "warning"
+      );
+      return false;
+    }
 
     try {
       await callWithWakeRetry(
@@ -3323,11 +3332,26 @@
         { retry: true }
       );
     } catch (error) {
-      // A retry after a lost response can report "already started"; treat that
-      // as success, otherwise surface why the room cannot open yet.
-      if (!error || error.status !== 409) {
-        if (!isServiceUnavailable(error)) setAppMessage(error.message);
-        return;
+      if (error && error.status === 409) {
+        // A retry after a lost response can report a conflict even though the
+        // first call actually succeeded. Ask the server for the real status
+        // instead of pretending the appointment started.
+        if (state.doctor.sessionId) {
+          await loadDoctorQueue(state.doctor.sessionId, { silent: true });
+        }
+        const fresh = findDoctorAppointment(appointment.appointmentId);
+        if (!fresh || fresh.status !== "IN_CONSULTATION") {
+          if (!isServiceUnavailable(error)) setAppMessage(error.message);
+          return false;
+        }
+      } else {
+        if (!error || !isServiceUnavailable(error)) {
+          setAppMessage(
+            (error && error.message) ||
+              "The consultation room could not be opened."
+          );
+        }
+        return false;
       }
     }
 
@@ -3352,6 +3376,8 @@
     if (activeView === "doctor") {
       void loadDoctorQueue(state.doctor.sessionId);
     }
+
+    return true;
   }
 
   async function runDoctorAction(name, appointmentId, button) {
@@ -3983,6 +4009,22 @@
       return;
     }
 
+    // Doctors reach this room from the queue chat button, the notes panel,
+    // the appointment table, a deep link or the picker. Start the online
+    // consultation on every path, otherwise both participants sit in a
+    // read-only room while the server still reports BOOKED.
+    if (
+      S && S.role === "DOCTOR" &&
+      appointment.consultationType === "ONLINE" &&
+      ["BOOKED", "ARRIVED"].includes(appointment.status)
+    ) {
+      await ensureDoctorConsultationStarted(appointment);
+      const refreshed = findDoctorAppointment(appointmentId);
+      if (refreshed && refreshed.status === "IN_CONSULTATION") {
+        appointment = refreshed;
+      }
+    }
+
     state.consult.appointmentId = appointmentId;
     state.consult.appointment = appointment;
     state.consult.summary = null;
@@ -4068,7 +4110,7 @@
           "This consultation has ended, so the chat is read-only. Your summary remains available.";
       } else {
         note.textContent =
-          "Your consultation room is private to you and your doctor. It unlocks automatically here as soon as your doctor opens the chat.";
+          "Your consultation room is private to you and your doctor. It unlocks once payment is recorded and your doctor opens the chat.";
       }
     }
 
