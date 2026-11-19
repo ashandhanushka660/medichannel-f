@@ -227,9 +227,11 @@ export default function AppointmentsPage() {
                       Check in
                     </button>
                   )}
-                  <button className="text-sm font-semibold text-red-700" onClick={() => updateAppointment(appointment.appointmentId, "cancel")}>
-                    Cancel appointment
-                  </button>
+                  {appointment.paymentStatus !== "PAID" && (
+                    <button className="text-sm font-semibold text-red-700" onClick={() => updateAppointment(appointment.appointmentId, "cancel")}>
+                      Cancel appointment
+                    </button>
+                  )}
                 </div>
               )}
             </article>

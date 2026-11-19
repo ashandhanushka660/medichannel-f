@@ -2257,14 +2257,24 @@
         );
       }
 
-      actions.append(
-        actionButton(
-          "Cancel",
-          "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
-          "cancel-appointment",
-          appointment.appointmentId
-        )
-      );
+      // BR-07: patients may cancel only unpaid, still-booked appointments
+      // that are more than 3 hours before the session. Paid appointments
+      // are non-refundable and must be cancelled by a manager/administrator.
+      const cancellable =
+        ["BOOKED", "ARRIVED"].includes(appointment.status) &&
+        appointment.paymentStatus !== "PAID" &&
+        canCancel(appointment);
+
+      if (cancellable) {
+        actions.append(
+          actionButton(
+            "Cancel",
+            "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+            "cancel-appointment",
+            appointment.appointmentId
+          )
+        );
+      }
 
       row.append(actions);
       tbody.append(row);
