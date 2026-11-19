@@ -86,5 +86,12 @@ Both repositories deploy from their `main` branch.
 2. `GET https://<frontend-site>/api/backend/wake` returns `{"status":"ready"}`.
 3. `GET https://<frontend-site>/api/backend/doctors` returns the catalogue.
 4. Register a patient, sign in, book an appointment, and confirm the queue card updates.
-5. Sign in as ADMIN and confirm audit logs and notices load.
-6. Confirm the browser console shows no CSP violations.
+5. Sign in as ADMIN and confirm audit logs load.
+6. From the admin Accounts panel, reset a doctor or manager password; confirm
+   the account is unlocked, existing sessions are signed out and the action is
+   written to the audit log.
+7. Sign in as MANAGER and confirm notices load, publish, edit and delete from
+   the manager dashboard; confirm the admin panel has no notice controls.
+8. From the manager dashboard, book a walk-in patient, confirm the appointment
+   appears in Reception, then mark arrival and record payment.
+9. Confirm the browser console shows no CSP violations.

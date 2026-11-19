@@ -10,6 +10,9 @@
   // Mirrors com.medichannel.dto.notice.NoticeRequest validation.
   var NOTICE_LIMITS = Object.freeze({ title: 150, body: 4000 });
 
+  // Mirrors ResetStaffPasswordRequest and PasswordPolicy.
+  var STAFF_PASSWORD = Object.freeze({ minLength: 8, maxBytes: 72 });
+
   function toNumber(value) {
     if (typeof value === "number") {
       return isFinite(value) ? value : null;
@@ -85,6 +88,55 @@
         body: validated.body,
         published: true,
       },
+    };
+  }
+
+  function staffPasswordPayload(password, confirmation) {
+    var value = String(password == null ? "" : password);
+    var confirm = String(confirmation == null ? "" : confirmation);
+
+    if (!value) {
+      return { ok: false, message: "A new password is required." };
+    }
+    if (value !== confirm) {
+      return { ok: false, message: "The passwords do not match." };
+    }
+    if (value.length < STAFF_PASSWORD.minLength) {
+      return {
+        ok: false,
+        message:
+          "Use at least " + STAFF_PASSWORD.minLength + " characters.",
+      };
+    }
+
+    var byteLength = value.length;
+    if (typeof TextEncoder === "function") {
+      byteLength = new TextEncoder().encode(value).length;
+    }
+    if (byteLength > STAFF_PASSWORD.maxBytes) {
+      return {
+        ok: false,
+        message:
+          "The password must not exceed " +
+          STAFF_PASSWORD.maxBytes +
+          " UTF-8 bytes.",
+      };
+    }
+    if (
+      !/[A-Za-z]/.test(value) ||
+      !/\d/.test(value) ||
+      !/[^A-Za-z0-9]/.test(value)
+    ) {
+      return {
+        ok: false,
+        message:
+          "Use at least one letter, one number and one symbol.",
+      };
+    }
+
+    return {
+      ok: true,
+      payload: { newPassword: value, confirmPassword: confirm },
     };
   }
 
@@ -227,8 +279,10 @@
 
   var MCManager = {
     NOTICE_LIMITS: NOTICE_LIMITS,
+    STAFF_PASSWORD: STAFF_PASSWORD,
     validateNoticeInput: validateNoticeInput,
     noticePayload: noticePayload,
+    staffPasswordPayload: staffPasswordPayload,
     dashboardMetrics: dashboardMetrics,
     dashboardCardValues: dashboardCardValues,
     formatCount: formatCount,

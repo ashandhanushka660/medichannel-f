@@ -52,6 +52,41 @@ test("notice validation reports missing fields without submitting", () => {
   assert.equal(UI.noticePayload("", "").payload, undefined);
 });
 
+test("staff password payload mirrors ResetStaffPasswordRequest", () => {
+  assert.equal(UI.STAFF_PASSWORD.minLength, 8);
+  assert.equal(UI.STAFF_PASSWORD.maxBytes, 72);
+
+  const result = UI.staffPasswordPayload("Temp@12345", "Temp@12345");
+  assert.equal(result.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.payload)), {
+    newPassword: "Temp@12345",
+    confirmPassword: "Temp@12345",
+  });
+});
+
+test("staff password validation rejects weak, mismatched and oversized values", () => {
+  assert.match(
+    UI.staffPasswordPayload("", "").message,
+    /new password is required/i
+  );
+  assert.match(
+    UI.staffPasswordPayload("Temp@12345", "Temp@12346").message,
+    /do not match/i
+  );
+  assert.match(
+    UI.staffPasswordPayload("Ab1@", "Ab1@").message,
+    /at least 8 characters/i
+  );
+  assert.match(
+    UI.staffPasswordPayload("Password1", "Password1").message,
+    /one symbol/i
+  );
+  assert.match(
+    UI.staffPasswordPayload("a".repeat(73), "a".repeat(73)).message,
+    /72 UTF-8 bytes/i
+  );
+});
+
 test("dashboard metrics come from the reports payload", () => {
   const metrics = UI.dashboardMetrics({
     todaySessions: [

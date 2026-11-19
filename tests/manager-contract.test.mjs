@@ -25,30 +25,108 @@ function attribute(tag, name) {
   return match ? match[1] : null;
 }
 
-test("manager interface no longer includes notice creation or publishing controls", () => {
-  assert.doesNotMatch(HTML, /data-manager-notice-toggle/);
-  assert.doesNotMatch(HTML, /id="manager-notice-form"/);
-  assert.doesNotMatch(HTML, /data-manager-notice-status/);
-  assert.doesNotMatch(HTML, /data-manager-notices-status/);
-  assert.doesNotMatch(HTML, /Publish a hospital notice/);
-  assert.doesNotMatch(APP, /async function publishManagerNotice/);
-  assert.doesNotMatch(APP, /async function loadManagerNotices/);
-  assert.doesNotMatch(APP, /function renderManagerNotice/);
-  assert.doesNotMatch(APP, /data-manager-notice-toggle/);
-  assert.doesNotMatch(APP, /data-manager-notice-form/);
+test("manager interface owns notice creation and publishing controls", () => {
+  assert.match(HTML, /href="#manager-n" data-panel-link class="sa">Notices/);
+  assert.match(APP, /async function loadManagerNotices/);
+  assert.match(APP, /async function saveManagerNotice/);
+  assert.match(APP, /function renderManagerNotice/);
+  assert.match(APP, /async function handleManagerNoticeAction/);
+  assert.match(APP, /function confirmManagerNoticeDelete/);
+  assert.match(APP, /MC\.createNotice\(payload\)/);
+  assert.match(APP, /MC\.publishNotice\(id\)/);
+  assert.match(APP, /MC\.withdrawNotice\(id\)/);
+  assert.match(APP, /MC\.deleteNotice\(id\)/);
 });
 
-test("admin notices management and delete confirmation are implemented", () => {
-  assert.match(APP, /async function loadAdminNotices/);
-  assert.match(APP, /async function saveAdminNotice/);
-  assert.match(APP, /function renderAdminNotice/);
-  assert.match(APP, /async function handleAdminNoticeAction/);
-  assert.match(APP, /function confirmAdminNoticeDelete/);
-  assert.match(APP, /Delete this notice\? This cannot be undone\./);
-  assert.match(APP, /"Yes"/);
-  assert.match(APP, /"No"/);
-  assert.match(APP, /MC\.deleteNotice\(id\)/);
+test("admin panel has no notice publishing or CRUD controls", () => {
+  assert.doesNotMatch(APP, /function ensureAdminNoticesPanel/);
+  assert.doesNotMatch(APP, /async function loadAdminNotices/);
+  assert.doesNotMatch(APP, /async function saveAdminNotice/);
+  assert.doesNotMatch(APP, /function renderAdminNotice/);
+  assert.doesNotMatch(APP, /async function handleAdminNoticeAction/);
+  assert.doesNotMatch(APP, /data-admin-notice/);
+  assert.doesNotMatch(APP, /data-admin-notices/);
+  assert.doesNotMatch(APP, /state\.adminNotices/);
+  assert.doesNotMatch(HTML, /href="#admin-n"/);
   assert.match(HTML, /id="manager-x"[\s\S]*?<h3 class="font-semibold text-ink">Patient feedback<\/h3>/);
+});
+
+test("admin staff table exposes password reset for doctors and managers", () => {
+  assert.match(APP, /data-reset-user=/);
+  assert.match(
+    APP,
+    /const canResetPassword =\s*member\.role === "DOCTOR" \|\| member\.role === "MANAGER"/
+  );
+  assert.match(APP, /closest\("\[data-reset-user\]"\)/);
+  assert.match(APP, /openResetPassword\(resetUserBtn\.getAttribute\("data-reset-user"\)\)/);
+  // The manager directory remains read-only.
+  assert.match(APP, /renderStaffRows\(managerTbody, false\)/);
+});
+
+test("reset password dialog validates and posts through the staff API", () => {
+  assert.match(HTML, /<dialog id="reset-password-dialog"/);
+  assert.match(HTML, /<form id="reset-password-form"/);
+
+  for (const marker of [
+    "data-reset-email",
+    "data-reset-password",
+    "data-reset-confirm",
+    "data-reset-show",
+    "data-reset-status",
+    "data-reset-cancel",
+    "data-reset-submit",
+  ]) {
+    assert.match(HTML, new RegExp(marker), "missing " + marker);
+  }
+
+  assert.match(APP, /ManagerUI\.staffPasswordPayload\(/);
+  assert.match(APP, /ManagerUI\.lockAction\(submit\)/);
+  assert.match(APP, /MC\.resetStaffPassword\(/);
+  assert.match(APP, /Password reset for /);
+  assert.match(APP, /void loadAuditLogs\(\)/);
+  assert.match(API, /resetStaffPassword\(userId, payload\)/);
+  assert.match(API, /\/reset-password"/);
+});
+
+test("walk-in booking button opens a complete reception booking dialog", () => {
+  const button = tagWithAttribute("data-open-walkin");
+  assert.match(button, /type="button"/);
+  assert.match(HTML, /<dialog id="walkin-dialog"/);
+  assert.match(HTML, /<form id="walkin-form"/);
+
+  for (const marker of [
+    "data-walkin-session",
+    "data-walkin-first-name",
+    "data-walkin-last-name",
+    "data-walkin-phone",
+    "data-walkin-reason",
+    "data-walkin-status",
+    "data-walkin-cancel",
+    "data-walkin-submit",
+  ]) {
+    assert.match(HTML, new RegExp(marker), "missing " + marker);
+  }
+
+  assert.match(
+    APP,
+    /closest\("\[data-open-walkin\]"\)\s*\)\s*\{\s*openWalkInDialog\(\);/
+  );
+  assert.match(APP, /walkinForm\.addEventListener\("submit"/);
+  assert.match(APP, /data-walkin-cancel\]\"\);/);
+});
+
+test("walk-in submission validates the phone and uses the staff API", () => {
+  const start = APP.indexOf("async function submitWalkIn");
+  assert.ok(start > -1, "submitWalkIn is missing");
+  const block = APP.slice(start, start + 2600);
+
+  assert.match(block, /\^07\[0-9\]\{8\}\$/);
+  assert.match(block, /ManagerUI\.lockAction\(submit\)/);
+  assert.match(block, /MC\.bookWalkIn\(\{/);
+  assert.match(block, /loadManagerReception\(\{ silent: true \}\)/);
+  assert.match(block, /loadManagerSessions\(\)/);
+  assert.match(API, /bookWalkIn\(payload\)/);
+  assert.match(API, /request\("admin\/appointments\/walk-in"/);
 });
 
 test("dashboard exposes a live status region and real metric slots", () => {
@@ -96,8 +174,8 @@ test("dashboard no longer derives active doctors from the public sessions feed",
 });
 
 test("notice and review rendering use the backend field names", () => {
-  const noticeStart = APP.indexOf("function renderAdminNotice");
-  assert.ok(noticeStart > -1, "renderAdminNotice is missing");
+  const noticeStart = APP.indexOf("function renderManagerNotice");
+  assert.ok(noticeStart > -1, "renderManagerNotice is missing");
   const noticeBlock = APP.slice(noticeStart, noticeStart + 1600);
 
   assert.match(noticeBlock, /Boolean\(notice\.published\)/);
@@ -109,10 +187,10 @@ test("notice and review rendering use the backend field names", () => {
   assert.doesNotMatch(APP, /review\.id\b/);
 });
 
-test("admin notice save and moderation are protected against duplicate clicks", () => {
+test("manager notice save and moderation are protected against duplicate clicks", () => {
   assert.match(
     APP,
-    /async function saveAdminNotice[\s\S]{0,900}?ManagerUI\.lockAction\(submit\)/
+    /async function saveManagerNotice[\s\S]{0,900}?ManagerUI\.lockAction\(submit\)/
   );
   assert.match(
     APP,
@@ -151,19 +229,19 @@ test("manager table cells escape backend values, including queue numbers", () =>
   assert.match(APP, /Failed to load sessions: \$\{message\}/);
 });
 
-test("admin notice save and action feedback is written to visible status regions", () => {
-  const saveStart = APP.indexOf("async function saveAdminNotice");
-  assert.ok(saveStart > -1, "saveAdminNotice is missing");
+test("manager notice save and action feedback is written to visible status regions", () => {
+  const saveStart = APP.indexOf("async function saveManagerNotice");
+  assert.ok(saveStart > -1, "saveManagerNotice is missing");
   const saveBlock = APP.slice(saveStart, saveStart + 2600);
   assert.match(saveBlock, /Notice updated successfully\.|Notice published successfully\./);
-  assert.match(saveBlock, /data-admin-notices-status/);
+  assert.match(saveBlock, /data-manager-notices-status/);
 
-  const actionStart = APP.indexOf("async function handleAdminNoticeAction");
-  assert.ok(actionStart > -1, "handleAdminNoticeAction is missing");
+  const actionStart = APP.indexOf("async function handleManagerNoticeAction");
+  assert.ok(actionStart > -1, "handleManagerNoticeAction is missing");
   const actionBlock = APP.slice(actionStart, actionStart + 2600);
   assert.match(actionBlock, /Notice deleted successfully\./);
   assert.match(actionBlock, /Could not " \+ action \+ " notice: "/);
-  assert.match(actionBlock, /data-admin-notices-status/);
+  assert.match(actionBlock, /data-manager-notices-status/);
 });
 
 test("dashboard cards use the tested formatter and honest labels", () => {

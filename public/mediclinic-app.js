@@ -116,7 +116,7 @@
     pendingIntent: null,
     publicNoticesLoaded: false,
     publicNotices: [],
-    adminNotices: [],
+    managerNotices: [],
     doctor: {
       sessions: [],
       sessionsLoaded: false,
@@ -521,7 +521,7 @@
       void loadAdminStats();
     }
 
-    if (link.hash === "#admin-a" || link.hash === "#admin") {
+    if (link.hash === "#manager-x" || link.hash === "#admin") {
       void loadAuditLogs();
     }
 
@@ -542,16 +542,16 @@
       void loadManagerReviews();
     }
 
-    if (link.hash === "#admin-n") {
-      void loadAdminNotices();
+    if (link.hash === "#manager-n" || link.hash === "#manager") {
+      void loadManagerNotices();
     }
   }
 
   function initPanels(view, requestedPanel) {
     if (!view) return;
 
-    if (view.dataset.view === "admin") {
-      ensureAdminNoticesPanel();
+    if (view.dataset.view === "manager") {
+      ensureManagerNoticesPanel();
     }
 
     const panels = Array.from(
@@ -629,8 +629,8 @@
       void loadManagerReviews();
     }
 
-    if (active.id === "admin-n") {
-      void loadAdminNotices();
+    if (active.id === "manager-n" || active.id === "manager") {
+      void loadManagerNotices();
     }
   }
 
@@ -732,7 +732,6 @@
     } else if (id === "consult") {
       void loadConsultationPicker();
     } else if (id === "admin") {
-      ensureAdminNoticesPanel();
       void loadAdminSpecialisations();
       void loadStaffAccounts();
       void loadAdminRooms();
@@ -745,6 +744,8 @@
         }, 6000);
       }
     } else if (id === "manager") {
+      ensureManagerNoticesPanel();
+      void loadManagerNotices();
       void loadStaffAccounts();
       void loadManagerSessionPicker();
       void loadManagerSessions();
@@ -4555,10 +4556,15 @@
               : isActive
                 ? `<button type="button" data-toggle-user="${member.userId}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
                 : `<button type="button" data-toggle-user="${member.userId}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
+            const canResetPassword =
+              member.role === "DOCTOR" || member.role === "MANAGER";
+            const resetBtn = (isDeleted || isSelf || !canResetPassword)
+              ? ""
+              : `<button type="button" data-reset-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Reset password</button>`;
             const deleteBtn = (isDeleted || isSelf)
               ? ""
               : `<button type="button" data-delete-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 min-h-8 px-2.5 py-1 text-xs">Delete</button>`;
-            actionHtml = `<td data-label="Actions"><div class="flex flex-wrap gap-1.5">${editBtn}${toggleBtn}${deleteBtn}</div></td>`;
+            actionHtml = `<td data-label="Actions"><div class="flex flex-wrap gap-1.5">${editBtn}${toggleBtn}${resetBtn}${deleteBtn}</div></td>`;
           }
 
           tr.innerHTML = `
@@ -4647,6 +4653,26 @@
     setStatus(form.querySelector("[data-delete-status]"), "");
     dialog.showModal();
     if (confirmInput) confirmInput.focus();
+  }
+
+  function openResetPassword(userId) {
+    const member = staffDirectory.get(userId);
+    const dialog = $("reset-password-dialog");
+    const form = $("reset-password-form");
+    if (!member || !dialog || !form) return;
+    if (member.role !== "DOCTOR" && member.role !== "MANAGER") return;
+
+    form.reset();
+    form.dataset.userId = member.userId;
+    const email = form.querySelector("[data-reset-email]");
+    if (email) email.textContent = member.email;
+    const submit = form.querySelector("[data-reset-submit]");
+    if (submit) ManagerUI.unlockAction(submit);
+    setStatus(form.querySelector("[data-reset-status]"), "");
+
+    dialog.showModal();
+    const first = form.querySelector("[data-reset-password]");
+    if (first && typeof first.focus === "function") first.focus();
   }
 
   function renderAuditLogRow(log) {
@@ -5256,36 +5282,36 @@
     return card;
   }
 
-  const adminNoticeState = {
+  const managerNoticeState = {
     editingId: null,
     editingPublished: true,
     page: 1,
     pageSize: 6,
   };
 
-  function setAdminNoticeFormMode(mode, notice) {
-    const form = document.getElementById("admin-notice-form");
+  function setManagerNoticeFormMode(mode, notice) {
+    const form = document.getElementById("manager-notice-form");
     if (!form) return;
 
-    const title = form.querySelector("#admin-notice-title");
-    const body = form.querySelector("#admin-notice-body");
-    const submit = form.querySelector('[data-admin-notice-submit]');
-    const cancel = form.querySelector('[data-admin-notice-cancel-edit]');
-    const heading = document.querySelector("[data-admin-notice-form-heading]");
-    const status = form.querySelector("[data-admin-notice-status]");
+    const title = form.querySelector("#manager-notice-title");
+    const body = form.querySelector("#manager-notice-body");
+    const submit = form.querySelector('[data-manager-notice-submit]');
+    const cancel = form.querySelector('[data-manager-notice-cancel-edit]');
+    const heading = document.querySelector("[data-manager-notice-form-heading]");
+    const status = form.querySelector("[data-manager-notice-status]");
 
     if (mode === "edit" && notice) {
-      adminNoticeState.editingId = notice.id || null;
-      adminNoticeState.editingPublished = Boolean(notice.published);
+      managerNoticeState.editingId = notice.id || null;
+      managerNoticeState.editingPublished = Boolean(notice.published);
       if (title) title.value = notice.title || "";
       if (body) body.value = notice.body || "";
       if (submit) submit.textContent = "Save changes";
       if (cancel) cancel.hidden = false;
       if (heading) heading.textContent = "Edit hospital notice";
-      setStatus(status, "Editing notice. Saving will " + (adminNoticeState.editingPublished ? "keep it published." : "keep it as a draft/withdrawn notice."));
+      setStatus(status, "Editing notice. Saving will " + (managerNoticeState.editingPublished ? "keep it published." : "keep it as a draft/withdrawn notice."));
     } else {
-      adminNoticeState.editingId = null;
-      adminNoticeState.editingPublished = true;
+      managerNoticeState.editingId = null;
+      managerNoticeState.editingPublished = true;
       form.reset();
       if (submit) submit.textContent = "Publish notice";
       if (cancel) cancel.hidden = true;
@@ -5294,7 +5320,7 @@
     }
   }
 
-  function renderAdminNotice(notice) {
+  function renderManagerNotice(notice) {
     const published = Boolean(notice.published);
     const card = el(
       "article",
@@ -5303,7 +5329,7 @@
           ? "border-l-4 border-l-emerald-400"
           : "border-l-4 border-l-slate-300")
     );
-    card.dataset.adminNotice = notice.id || "";
+    card.dataset.managerNotice = notice.id || "";
 
     const header = el("div", "flex flex-wrap items-start justify-between gap-2");
     header.append(
@@ -5340,7 +5366,7 @@
     const actions = el("div", "mt-1 flex flex-wrap items-center gap-2 border-t border-line pt-3");
     const editBtn = el("button", "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs", "Edit");
     editBtn.type = "button";
-    editBtn.dataset.adminNoticeAction = "edit";
+    editBtn.dataset.managerNoticeAction = "edit";
     editBtn.dataset.noticeId = notice.id || "";
 
     const toggleBtn = el(
@@ -5349,12 +5375,12 @@
       notice.published ? "Withdraw" : "Publish"
     );
     toggleBtn.type = "button";
-    toggleBtn.dataset.adminNoticeAction = notice.published ? "withdraw" : "publish";
+    toggleBtn.dataset.managerNoticeAction = notice.published ? "withdraw" : "publish";
     toggleBtn.dataset.noticeId = notice.id || "";
 
     const deleteBtn = el("button", "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-700 hover:bg-rose-50 min-h-9 px-3 py-1.5 text-xs", "Delete");
     deleteBtn.type = "button";
-    deleteBtn.dataset.adminNoticeAction = "delete";
+    deleteBtn.dataset.managerNoticeAction = "delete";
     deleteBtn.dataset.noticeId = notice.id || "";
 
     actions.append(editBtn, toggleBtn, deleteBtn);
@@ -5362,22 +5388,22 @@
     return card;
   }
 
-  function ensureAdminNoticesPanel() {
-    const adminView = views.find((item) => item.dataset.view === "admin");
-    if (!adminView) return false;
+  function ensureManagerNoticesPanel() {
+    const managerView = views.find((item) => item.dataset.view === "manager");
+    if (!managerView) return false;
 
-    const nav = adminView.querySelector("aside nav, aside");
-    const main = adminView.querySelector("main");
+    const nav = managerView.querySelector("aside nav, aside");
+    const main = managerView.querySelector("main");
     if (!nav || !main) return false;
 
-    let link = adminView.querySelector('[data-panel-link][href="#admin-n"]');
+    let link = managerView.querySelector('[data-panel-link][href="#manager-n"]');
     if (!link) {
       link = document.createElement("a");
-      link.href = "#admin-n";
+      link.href = "#manager-n";
       link.className = "sa";
       link.dataset.panelLink = "";
       link.textContent = "Notices";
-      const auditLink = adminView.querySelector('[data-panel-link][href="#admin-a"]');
+      const auditLink = managerView.querySelector('[data-panel-link][href="#manager-x"]');
       if (auditLink && auditLink.parentNode === nav) {
         nav.insertBefore(link, auditLink);
       } else {
@@ -5385,10 +5411,10 @@
       }
     }
 
-    let panel = adminView.querySelector("#admin-n");
+    let panel = managerView.querySelector("#manager-n");
     if (!panel) {
       panel = document.createElement("section");
-      panel.id = "admin-n";
+      panel.id = "manager-n";
       panel.dataset.dashboardPanel = "";
       panel.hidden = true;
       panel.className = "grid gap-4";
@@ -5396,26 +5422,26 @@
       const card = el("section", "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm grid gap-4");
       card.append(
         el("h2", "text-xl font-bold text-ink", "Manage hospital notices"),
-        el("p", "text-sm text-slate2", "Create, edit, publish/withdraw, and delete notices from the admin page. Published notices appear in the public dashboard’s Notices & announcements section.")
+        el("p", "text-sm text-slate2", "Create, edit, publish/withdraw, and delete notices from the manager dashboard. Published notices appear in the public dashboard’s Notices & announcements section.")
       );
 
       const form = document.createElement("form");
-      form.id = "admin-notice-form";
+      form.id = "manager-notice-form";
       form.className = "grid gap-3 rounded-lg border border-line bg-snow p-3 sm:p-4";
       form.setAttribute("novalidate", "");
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        void saveAdminNotice(form);
+        void saveManagerNotice(form);
       });
 
       const formHeading = el("h3", "font-semibold text-ink", "Publish hospital notices");
-      formHeading.dataset.adminNoticeFormHeading = "";
+      formHeading.dataset.managerNoticeFormHeading = "";
 
       const titleWrap = el("div");
       const titleLabel = el("label", "", "Notice title");
-      titleLabel.setAttribute("for", "admin-notice-title");
+      titleLabel.setAttribute("for", "manager-notice-title");
       const titleInput = document.createElement("input");
-      titleInput.id = "admin-notice-title";
+      titleInput.id = "manager-notice-title";
       titleInput.name = "title";
       titleInput.maxLength = 150;
       titleInput.required = true;
@@ -5424,9 +5450,9 @@
 
       const bodyWrap = el("div");
       const bodyLabel = el("label", "", "Notice body");
-      bodyLabel.setAttribute("for", "admin-notice-body");
+      bodyLabel.setAttribute("for", "manager-notice-body");
       const bodyInput = document.createElement("textarea");
-      bodyInput.id = "admin-notice-body";
+      bodyInput.id = "manager-notice-body";
       bodyInput.name = "body";
       bodyInput.rows = 5;
       bodyInput.maxLength = 4000;
@@ -5436,7 +5462,7 @@
 
       const limits = el("p", "text-xs text-mute", "Title up to 150 characters, body up to 4000 characters.");
       const status = document.createElement("output");
-      status.dataset.adminNoticeStatus = "";
+      status.dataset.managerNoticeStatus = "";
       status.setAttribute("aria-live", "polite");
       status.className = "block text-sm text-slate2";
       status.hidden = true;
@@ -5444,18 +5470,18 @@
       const actions = el("div", "flex flex-wrap gap-2");
       const submit = document.createElement("button");
       submit.type = "submit";
-      submit.dataset.adminNoticeSubmit = "";
+      submit.dataset.managerNoticeSubmit = "";
       submit.className = "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-brand border-brand text-white hover:bg-brand-d min-h-10 px-3.5 py-2";
       submit.textContent = "Publish notice";
 
       const cancelEdit = document.createElement("button");
       cancelEdit.type = "button";
-      cancelEdit.dataset.adminNoticeCancelEdit = "";
+      cancelEdit.dataset.managerNoticeCancelEdit = "";
       cancelEdit.hidden = true;
       cancelEdit.className = "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-10 px-3.5 py-2";
       cancelEdit.textContent = "Cancel edit";
       cancelEdit.addEventListener("click", () => {
-        setAdminNoticeFormMode("create");
+        setManagerNoticeFormMode("create");
       });
 
       const reset = document.createElement("button");
@@ -5463,8 +5489,8 @@
       reset.className = "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-10 px-3.5 py-2";
       reset.textContent = "Clear";
       reset.addEventListener("click", () => {
-        if (adminNoticeState.editingId) {
-          setAdminNoticeFormMode("create");
+        if (managerNoticeState.editingId) {
+          setManagerNoticeFormMode("create");
         } else {
           form.reset();
           setStatus(status, "");
@@ -5478,29 +5504,29 @@
       const listCard = el("section", "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm grid gap-3");
       listCard.append(el("h3", "font-semibold text-ink", "All notices"));
       const listStatus = document.createElement("output");
-      listStatus.dataset.adminNoticesStatus = "";
+      listStatus.dataset.managerNoticesStatus = "";
       listStatus.setAttribute("aria-live", "polite");
       listStatus.className = "block text-sm text-slate2";
       listStatus.textContent = "Loading notices…";
       const list = el("div", "grid gap-4 md:grid-cols-2");
-      list.dataset.adminNotices = "";
+      list.dataset.managerNotices = "";
       list.addEventListener("click", (event) => {
-        const button = event.target.closest("button[data-admin-notice-action]");
+        const button = event.target.closest("button[data-manager-notice-action]");
         if (!button) return;
-        const action = button.dataset.adminNoticeAction;
+        const action = button.dataset.managerNoticeAction;
         const noticeId = button.dataset.noticeId;
-        const notice = Array.isArray(state.adminNotices)
-          ? state.adminNotices.find((item) => String(item.id) === String(noticeId))
+        const notice = Array.isArray(state.managerNotices)
+          ? state.managerNotices.find((item) => String(item.id) === String(noticeId))
           : null;
         if (action === "edit" && notice) {
-          setAdminNoticeFormMode("edit", notice);
-          const titleField = form.querySelector("#admin-notice-title");
+          setManagerNoticeFormMode("edit", notice);
+          const titleField = form.querySelector("#manager-notice-title");
           if (titleField && typeof titleField.focus === "function") titleField.focus();
           form.scrollIntoView({ block: "nearest" });
           return;
         }
         if (action === "publish" || action === "withdraw" || action === "delete") {
-          void handleAdminNoticeAction(action, noticeId, button);
+          void handleManagerNoticeAction(action, noticeId, button);
         }
       });
 
@@ -5508,23 +5534,23 @@
         "nav",
         "flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3",
       );
-      pagination.dataset.adminNoticesPagination = "";
+      pagination.dataset.managerNoticesPagination = "";
       pagination.setAttribute("aria-label", "Notice pages");
       pagination.hidden = true;
       pagination.addEventListener("click", (event) => {
-        const button = event.target.closest("button[data-admin-notices-page]");
+        const button = event.target.closest("button[data-manager-notices-page]");
         if (!button || button.disabled) return;
-        const notices = Array.isArray(state.adminNotices) ? state.adminNotices : [];
-        const pages = Math.max(1, Math.ceil(notices.length / adminNoticeState.pageSize));
-        const direction = button.dataset.adminNoticesPage;
+        const notices = Array.isArray(state.managerNotices) ? state.managerNotices : [];
+        const pages = Math.max(1, Math.ceil(notices.length / managerNoticeState.pageSize));
+        const direction = button.dataset.managerNoticesPage;
         const nextPage =
           direction === "next"
-            ? adminNoticeState.page + 1
+            ? managerNoticeState.page + 1
             : direction === "previous"
-              ? adminNoticeState.page - 1
-              : adminNoticeState.page;
-        adminNoticeState.page = Math.min(Math.max(1, nextPage), pages);
-        renderAdminNoticesPage();
+              ? managerNoticeState.page - 1
+              : managerNoticeState.page;
+        managerNoticeState.page = Math.min(Math.max(1, nextPage), pages);
+        renderManagerNoticesPage();
       });
 
       listCard.append(listStatus, list, pagination);
@@ -5536,20 +5562,20 @@
     return true;
   }
 
-  function renderAdminNoticesPage() {
-    const container = document.querySelector("[data-admin-notices]");
-    const pagination = document.querySelector("[data-admin-notices-pagination]");
+  function renderManagerNoticesPage() {
+    const container = document.querySelector("[data-manager-notices]");
+    const pagination = document.querySelector("[data-manager-notices-pagination]");
     if (!container) return;
 
-    const notices = Array.isArray(state.adminNotices) ? state.adminNotices : [];
-    const size = adminNoticeState.pageSize;
+    const notices = Array.isArray(state.managerNotices) ? state.managerNotices : [];
+    const size = managerNoticeState.pageSize;
     const pages = Math.max(1, Math.ceil(notices.length / size));
-    const page = Math.min(Math.max(1, adminNoticeState.page), pages);
-    adminNoticeState.page = page;
+    const page = Math.min(Math.max(1, managerNoticeState.page), pages);
+    managerNoticeState.page = page;
 
     const start = notices.length ? (page - 1) * size : 0;
     const end = Math.min(start + size, notices.length);
-    container.replaceChildren(...notices.slice(start, end).map(renderAdminNotice));
+    container.replaceChildren(...notices.slice(start, end).map(renderManagerNotice));
 
     if (!pagination) return;
 
@@ -5581,7 +5607,7 @@
       "Previous"
     );
     previous.type = "button";
-    previous.dataset.adminNoticesPage = "previous";
+    previous.dataset.managerNoticesPage = "previous";
     previous.disabled = page <= 1;
 
     const indicator = el(
@@ -5596,22 +5622,22 @@
       "Next"
     );
     next.type = "button";
-    next.dataset.adminNoticesPage = "next";
+    next.dataset.managerNoticesPage = "next";
     next.disabled = page >= pages;
 
     controls.append(previous, indicator, next);
     pagination.replaceChildren(label, controls);
   }
 
-  async function loadAdminNotices(options) {
-    if (!ensureAdminNoticesPanel()) return false;
-    const container = document.querySelector("[data-admin-notices]");
-    const status = document.querySelector("[data-admin-notices-status]");
+  async function loadManagerNotices(options) {
+    if (!ensureManagerNoticesPanel()) return false;
+    const container = document.querySelector("[data-manager-notices]");
+    const status = document.querySelector("[data-manager-notices-status]");
     if (!container || !status) return false;
 
     const settings = options || {};
     container.replaceChildren();
-    const pagination = document.querySelector("[data-admin-notices-pagination]");
+    const pagination = document.querySelector("[data-manager-notices-pagination]");
     if (pagination) pagination.hidden = true;
     setStatus(status, "Loading notices…");
 
@@ -5623,11 +5649,11 @@
         throw new Error("The notice service returned an invalid response.");
       }
 
-      state.adminNotices = notices;
+      state.managerNotices = notices;
       if (typeof settings.page === "number") {
-        adminNoticeState.page = settings.page;
+        managerNoticeState.page = settings.page;
       }
-      renderAdminNoticesPage();
+      renderManagerNoticesPage();
 
       if (notices.length === 0) {
         setStatus(
@@ -5645,8 +5671,8 @@
       );
       return true;
     } catch (error) {
-      console.warn("Could not load admin notices:", error);
-      state.adminNotices = [];
+      console.warn("Could not load manager notices:", error);
+      state.managerNotices = [];
       if (pagination) pagination.hidden = true;
       setStatus(
         status,
@@ -5657,11 +5683,11 @@
     }
   }
 
-  async function saveAdminNotice(form) {
+  async function saveManagerNotice(form) {
     if (!form || form.dataset.busy === "true") return;
 
-    const status = form.querySelector("[data-admin-notice-status]");
-    const submit = form.querySelector('[data-admin-notice-submit]');
+    const status = form.querySelector("[data-manager-notice-status]");
+    const submit = form.querySelector('[data-manager-notice-submit]');
     const title = String(form.elements.title.value || "");
     const body = String(form.elements.body.value || "");
     const validated = ManagerUI.noticePayload(title, body);
@@ -5673,11 +5699,11 @@
       return;
     }
 
-    const editingId = adminNoticeState.editingId;
+    const editingId = managerNoticeState.editingId;
     const payload = {
       title: validated.payload.title,
       body: validated.payload.body,
-      published: editingId ? Boolean(adminNoticeState.editingPublished) : true,
+      published: editingId ? Boolean(managerNoticeState.editingPublished) : true,
     };
 
     if (!ManagerUI.lockAction(submit)) return;
@@ -5695,14 +5721,14 @@
         });
       }
 
-      setAdminNoticeFormMode("create");
-      const refreshed = await loadAdminNotices({
+      setManagerNoticeFormMode("create");
+      const refreshed = await loadManagerNotices({
         successMessage: editingId ? "Notice updated successfully." : "Notice published successfully.",
         page: 1,
       });
       if (!refreshed) {
         setStatus(
-          document.querySelector("[data-admin-notices-status]"),
+          document.querySelector("[data-manager-notices-status]"),
           (editingId ? "Notice updated successfully." : "Notice published successfully.") + " The notice list could not be refreshed.",
           true
         );
@@ -5712,7 +5738,7 @@
         void loadPublicNotices({ force: true });
       }
     } catch (error) {
-      console.warn("Could not save admin notice:", error);
+      console.warn("Could not save manager notice:", error);
       setStatus(
         status,
         "Could not " + (editingId ? "update" : "publish") + " notice: " + (error.message || "Unknown error"),
@@ -5724,8 +5750,8 @@
     }
   }
 
-  function confirmAdminNoticeDelete() {
-    const status = document.querySelector("[data-admin-notices-status]");
+  function confirmManagerNoticeDelete() {
+    const status = document.querySelector("[data-manager-notices-status]");
     if (!status) return Promise.resolve(false);
 
     return new Promise((resolve) => {
@@ -5768,11 +5794,11 @@
     });
   }
 
-  async function handleAdminNoticeAction(action, noticeId, button) {
+  async function handleManagerNoticeAction(action, noticeId, button) {
     const id = String(noticeId || "").trim();
     if (!id) {
       setStatus(
-        document.querySelector("[data-admin-notices-status]"),
+        document.querySelector("[data-manager-notices-status]"),
         "Could not " + action + " notice: missing notice id.",
         true
       );
@@ -5780,14 +5806,14 @@
     }
 
     if (action === "delete") {
-      const confirmed = await confirmAdminNoticeDelete();
+      const confirmed = await confirmManagerNoticeDelete();
       if (!confirmed) {
-        setStatus(document.querySelector("[data-admin-notices-status]"), "Delete cancelled.");
+        setStatus(document.querySelector("[data-manager-notices-status]"), "Delete cancelled.");
         return;
       }
     }
 
-    const listStatus = document.querySelector("[data-admin-notices-status]");
+    const listStatus = document.querySelector("[data-manager-notices-status]");
     const canLock = !button || !window.ManagerUI || typeof ManagerUI.lockAction !== "function" || ManagerUI.lockAction(button);
     if (!canLock) return;
 
@@ -5809,8 +5835,8 @@
           // already deleted the notice. That outcome still matches the intent.
           if (!error || error.status !== 404) throw error;
         }
-        if (String(adminNoticeState.editingId || "") === id) {
-          setAdminNoticeFormMode("create");
+        if (String(managerNoticeState.editingId || "") === id) {
+          setManagerNoticeFormMode("create");
         }
       } else if (action === "publish") {
         await callWithWakeRetry(() => MC.publishNotice(id), { retry: true });
@@ -5827,14 +5853,14 @@
             ? "Notice published successfully."
             : "Notice withdrawn successfully.";
 
-      const refreshed = await loadAdminNotices({ successMessage });
+      const refreshed = await loadManagerNotices({ successMessage });
       if (!refreshed) {
         setStatus(listStatus, successMessage + " The notice list could not be refreshed.", true);
       }
       state.publicNoticesLoaded = false;
       void loadPublicNotices({ force: true }).catch(() => {});
     } catch (error) {
-      console.warn("Could not perform admin notice action:", error);
+      console.warn("Could not perform manager notice action:", error);
       setStatus(
         listStatus,
         "Could not " + action + " notice: " + (error.message || "Unknown error"),
@@ -5987,6 +6013,145 @@
         status.hidden = false;
         status.textContent = "Reception could not be loaded. Try again in a moment.";
       }
+    }
+  }
+
+  async function loadWalkInSessions(select, status) {
+    if (!select) return;
+    const loading = el("option", "", "Loading open sessions…");
+    loading.value = "";
+    select.replaceChildren(loading);
+
+    try {
+      const sessions = await MC.sessions({});
+      const open = (Array.isArray(sessions) ? sessions : []).filter(
+        (session) =>
+          session.status === "OPEN" &&
+          Number(session.remainingAppointments) > 0
+      );
+
+      const placeholder = el("option", "", "Choose an open session…");
+      placeholder.value = "";
+      select.replaceChildren(placeholder);
+
+      open.forEach((session) => {
+        const label = [
+          "Dr. " + (session.doctorName || "Doctor"),
+          formatDate(session.sessionDate),
+          formatTime(session.startTime),
+          session.consultationType === "ONLINE" ? "online" : "physical",
+          session.remainingAppointments + " left",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        const option = el("option", "", label);
+        option.value = session.sessionId || "";
+        select.append(option);
+      });
+
+      if (!open.length) {
+        setStatus(status, "There are no open sessions with available slots.", true);
+      }
+    } catch (error) {
+      console.warn("Could not load walk-in sessions:", error);
+      setStatus(
+        status,
+        "Could not load sessions: " + (error.message || "Unknown error"),
+        true
+      );
+    }
+  }
+
+  function openWalkInDialog() {
+    const dialog = $("walkin-dialog");
+    const form = $("walkin-form");
+    if (!dialog || !form) return;
+
+    form.reset();
+    form.dataset.busy = "false";
+    const status = form.querySelector("[data-walkin-status]");
+    setStatus(status, "");
+    const submit = form.querySelector("[data-walkin-submit]");
+    if (submit) {
+      submit.disabled = false;
+      if (submit.dataset) submit.dataset.busy = "false";
+    }
+
+    dialog.showModal();
+    void loadWalkInSessions(form.querySelector("[data-walkin-session]"), status);
+    const first = form.querySelector("[data-walkin-first-name]");
+    if (first && typeof first.focus === "function") first.focus();
+  }
+
+  async function submitWalkIn(form) {
+    if (!form || form.dataset.busy === "true") return;
+
+    const status = form.querySelector("[data-walkin-status]");
+    const submit = form.querySelector("[data-walkin-submit]");
+    const field = (selector) => {
+      const node = form.querySelector(selector);
+      return node ? String(node.value || "").trim() : "";
+    };
+
+    const sessionId = field("[data-walkin-session]");
+    const firstName = field("[data-walkin-first-name]");
+    const lastName = field("[data-walkin-last-name]");
+    const phone = field("[data-walkin-phone]").replace(/[\s-]/g, "");
+    const reason = field("[data-walkin-reason]");
+
+    if (!sessionId || !firstName || !lastName || !reason) {
+      setStatus(status, "Please complete every field.", true);
+      return;
+    }
+    if (!/^07[0-9]{8}$/.test(phone)) {
+      setStatus(status, "Enter a valid mobile number in the 07XXXXXXXX format.", true);
+      return;
+    }
+
+    if (!ManagerUI.lockAction(submit)) return;
+    form.dataset.busy = "true";
+    setStatus(status, "Creating walk-in appointment…");
+
+    try {
+      const created = await callWithWakeRetry(
+        () =>
+          MC.bookWalkIn({
+            sessionId,
+            firstName,
+            lastName,
+            phone,
+            reason,
+          }),
+        { retry: false }
+      );
+
+      const dialog = $("walkin-dialog");
+      if (dialog && typeof dialog.close === "function") dialog.close();
+
+      const reference =
+        created && created.appointmentNumber != null
+          ? " · #" + created.appointmentNumber
+          : "";
+      setAppMessage(
+        "Walk-in appointment booked for " + firstName + " " + lastName + reference + ".",
+        "success"
+      );
+
+      await Promise.allSettled([
+        loadManagerReception({ silent: true }),
+        loadManagerSessions(),
+        loadSessions(),
+      ]);
+    } catch (error) {
+      console.warn("Could not book walk-in appointment:", error);
+      setStatus(
+        status,
+        "Could not book appointment: " + (error.message || "Unknown error"),
+        true
+      );
+    } finally {
+      form.dataset.busy = "false";
+      ManagerUI.unlockAction(submit);
     }
   }
 
@@ -6754,6 +6919,12 @@
       return;
     }
 
+    const resetUserBtn = event.target.closest("[data-reset-user]");
+    if (resetUserBtn) {
+      openResetPassword(resetUserBtn.getAttribute("data-reset-user"));
+      return;
+    }
+
     const fillLoginBtn = event.target.closest("[data-fill-login]");
     if (fillLoginBtn) {
       const [email, password] = (fillLoginBtn.getAttribute("data-fill-login") || "").split("|");
@@ -6793,6 +6964,11 @@
 
     if (event.target.closest("[data-wake-retry]")) {
       void wakeBackend();
+      return;
+    }
+
+    if (event.target.closest("[data-open-walkin]")) {
+      openWalkInDialog();
       return;
     }
 
@@ -7131,6 +7307,91 @@
     deleteCancel.addEventListener("click", () => {
       const dialog = $("delete-account-dialog");
       if (dialog) dialog.close();
+    });
+  }
+
+  const resetPasswordForm = $("reset-password-form");
+  if (resetPasswordForm) {
+    const showPasswords = resetPasswordForm.querySelector("[data-reset-show]");
+    if (showPasswords) {
+      showPasswords.addEventListener("change", () => {
+        const type = showPasswords.checked ? "text" : "password";
+        resetPasswordForm
+          .querySelectorAll("[data-reset-password], [data-reset-confirm]")
+          .forEach((input) => {
+            input.type = type;
+          });
+      });
+    }
+
+    resetPasswordForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const status = resetPasswordForm.querySelector("[data-reset-status]");
+      const submit = resetPasswordForm.querySelector("[data-reset-submit]");
+      const password = resetPasswordForm.querySelector("[data-reset-password]");
+      const confirmation = resetPasswordForm.querySelector("[data-reset-confirm]");
+      const emailNode = resetPasswordForm.querySelector("[data-reset-email]");
+      const email = emailNode ? emailNode.textContent : "the account";
+
+      const validated = ManagerUI.staffPasswordPayload(
+        password ? password.value : "",
+        confirmation ? confirmation.value : ""
+      );
+      if (!validated.ok) {
+        setStatus(status, validated.message, true);
+        return;
+      }
+      if (!ManagerUI.lockAction(submit)) return;
+
+      setStatus(status, "Resetting password…");
+      try {
+        await MC.resetStaffPassword(
+          resetPasswordForm.dataset.userId,
+          validated.payload
+        );
+        resetPasswordForm.reset();
+        const dialog = $("reset-password-dialog");
+        if (dialog && typeof dialog.close === "function") dialog.close();
+        setAppMessage(
+          "Password reset for " + email +
+            ". The account was unlocked and all sessions were signed out.",
+          "success"
+        );
+        await loadStaffAccounts();
+        void loadAuditLogs();
+      } catch (error) {
+        setStatus(
+          status,
+          error.message || "Unable to reset the password.",
+          true
+        );
+      } finally {
+        ManagerUI.unlockAction(submit);
+      }
+    });
+  }
+
+  const resetCancel = document.querySelector("[data-reset-cancel]");
+  if (resetCancel) {
+    resetCancel.addEventListener("click", () => {
+      const dialog = $("reset-password-dialog");
+      if (dialog && typeof dialog.close === "function") dialog.close();
+    });
+  }
+
+  const walkinForm = $("walkin-form");
+  if (walkinForm) {
+    walkinForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void submitWalkIn(walkinForm);
+    });
+  }
+
+  const walkinCancel = document.querySelector("[data-walkin-cancel]");
+  if (walkinCancel) {
+    walkinCancel.addEventListener("click", () => {
+      const dialog = $("walkin-dialog");
+      if (dialog && typeof dialog.close === "function") dialog.close();
     });
   }
 

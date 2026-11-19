@@ -335,6 +335,18 @@
       );
     },
 
+    resetStaffPassword(userId, payload) {
+      return request(
+        "admin/users/" +
+          encodeURIComponent(userId) +
+          "/reset-password",
+        {
+          method: "POST",
+          body: payload,
+        }
+      );
+    },
+
     adminDeleteUser(userId) {
       return request(
         "admin/users/" + encodeURIComponent(userId),
@@ -372,6 +384,13 @@
           "/arrive",
         { method: "PATCH", body: {} }
       );
+    },
+
+    bookWalkIn(payload) {
+      return request("admin/appointments/walk-in", {
+        method: "POST",
+        body: payload,
+      });
     },
 
     adminActivateUser(userId) {

@@ -67,6 +67,48 @@ test("creating a notice posts the backend NoticeRequest payload", async () => {
   });
 });
 
+test("walk-in booking posts the reception request payload", async () => {
+  const { MC, calls } = loadApi();
+  await MC.bookWalkIn({
+    sessionId: "33333333-3333-3333-3333-333333333333",
+    firstName: "Asha",
+    lastName: "Perera",
+    phone: "0712345678",
+    reason: "Persistent headache",
+  });
+
+  assert.equal(calls[0].url, "/api/backend/admin/appointments/walk-in");
+  assert.equal(calls[0].settings.method, "POST");
+  assert.match(calls[0].settings.headers.get("Content-Type"), /application\/json/);
+  assert.deepEqual(JSON.parse(calls[0].settings.body), {
+    sessionId: "33333333-3333-3333-3333-333333333333",
+    firstName: "Asha",
+    lastName: "Perera",
+    phone: "0712345678",
+    reason: "Persistent headache",
+  });
+});
+
+test("staff password reset posts the admin reset route", async () => {
+  const { MC, calls } = loadApi();
+  const userId = "44444444-4444-4444-4444-444444444444";
+  await MC.resetStaffPassword(userId, {
+    newPassword: "Temp@12345",
+    confirmPassword: "Temp@12345",
+  });
+
+  assert.equal(
+    calls[0].url,
+    "/api/backend/admin/users/" + userId + "/reset-password"
+  );
+  assert.equal(calls[0].settings.method, "POST");
+  assert.match(calls[0].settings.headers.get("Content-Type"), /application\/json/);
+  assert.deepEqual(JSON.parse(calls[0].settings.body), {
+    newPassword: "Temp@12345",
+    confirmPassword: "Temp@12345",
+  });
+});
+
 test("manager feedback uses GET /reviews/manage", async () => {
   const { MC, calls } = loadApi();
   await MC.managerReviews();
