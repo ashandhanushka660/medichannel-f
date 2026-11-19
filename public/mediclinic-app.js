@@ -174,6 +174,24 @@
     return String(value).slice(0, 5);
   }
 
+  /**
+   * Calendar date (YYYY-MM-DD) for timestamps and date-only values alike.
+   * `formatDate` only accepts date-only strings, so full ISO timestamps must
+   * not be passed to it.
+   */
+  function formatNoticeDate(value) {
+    if (!value) return "";
+    const text = String(value);
+    const date = new Date(text.length === 10 ? text + "T00:00:00" : text);
+    if (Number.isNaN(date.getTime())) return text.slice(0, 10);
+    return new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: TZ,
+    }).format(date);
+  }
+
   function formatDateTime(value) {
     if (!value) return "—";
     if (typeof value === "string" && value.length >= 16) {
@@ -1440,8 +1458,7 @@
     if (!panel) {
       panel = document.createElement("section");
       panel.id = "public-notices-panel";
-      panel.className =
-        "grid gap-4 rounded-3xl border border-brand/20 bg-white/95 p-5 sm:p-7 shadow-lg";
+      panel.className = "grid gap-5 py-2";
       panel.setAttribute("aria-label", "Hospital notices");
 
       const header = el("div", "flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between");
@@ -1456,17 +1473,16 @@
       const status = el("p", "text-base sm:text-lg text-slate2", "Loading notices…");
       status.dataset.publicNoticesStatus = "";
       status.setAttribute("role", "status");
-      const list = el("div", "grid gap-4 sm:grid-cols-2");
+      const list = el("div", "grid gap-6");
       list.dataset.publicNoticesList = "";
 
       panel.append(header, status, list);
     } else {
-      panel.className =
-        "grid gap-5 rounded-3xl border border-brand/20 bg-white/95 p-5 sm:p-7 shadow-lg";
+      panel.className = "grid gap-5 py-2";
       panel.hidden = false;
       panel.style.display = "";
       const list = panel.querySelector("[data-public-notices-list]");
-      if (list) list.className = "grid gap-4 sm:grid-cols-2";
+      if (list) list.className = "grid gap-6";
     }
 
     // Place notices prominently on the welcome page (before "How it works")
@@ -1521,7 +1537,7 @@
     const list = panel.querySelector("[data-public-notices-list]");
     if (!list) return;
 
-    list.className = "grid gap-4 sm:grid-cols-2";
+    list.className = "grid gap-6";
     list.replaceChildren();
 
     let published = (Array.isArray(notices) ? notices : []).filter(
@@ -1541,58 +1557,105 @@
         : "Latest notices published by hospital administration.";
     }
 
-    published.forEach((notice, index) => {
+    published.forEach((notice) => {
       const isSampleNotice = usingSample || Boolean(notice && notice.sample);
-      const accents = [
-        "border-sky-200 bg-white",
-        "border-emerald-200 bg-white",
-        "border-amber-200 bg-white",
-      ];
-      const sampleAccent = "border-amber-300 bg-amber-50/40";
       const card = el(
         "article",
-        "rounded-xl border p-5 sm:p-6 shadow-sm grid gap-3 content-start " +
-          (isSampleNotice ? sampleAccent : accents[index % accents.length] || "border-line bg-white")
+        "relative overflow-hidden rounded-lg border border-[#e2e8f0] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.10)] transition-shadow hover:shadow-md"
       );
 
-      const top = el("div", "flex items-start justify-between gap-3");
-      top.append(
+      const accent = el(
+        "span",
+        "pointer-events-none absolute inset-y-0 left-0 w-1.5 " +
+          (isSampleNotice ? "bg-amber-400" : "bg-[#1f3864]")
+      );
+      accent.setAttribute("aria-hidden", "true");
+      card.append(accent);
+
+      const inner = el(
+        "div",
+        "grid gap-3 py-5 pl-6 pr-5 sm:py-6 sm:pl-8 sm:pr-7"
+      );
+
+      const top = el(
+        "div",
+        "flex flex-wrap items-start justify-between gap-x-4 gap-y-2"
+      );
+      const badges = el("div", "flex flex-wrap items-center gap-2");
+      if (isSampleNotice) {
+        badges.append(
+          el(
+            "span",
+            "inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800",
+            "Sample notice"
+          )
+        );
+      }
+
+      const publishedOn = formatNoticeDate(notice.publishedAt || notice.createdAt);
+      const updatedOn = formatNoticeDate(notice.updatedAt);
+      const dates = el(
+        "div",
+        "ml-auto text-right text-xs leading-6 text-[#94a3b8] sm:text-sm"
+      );
+      if (publishedOn) dates.append(el("p", "", "Published: " + publishedOn));
+      if (updatedOn && updatedOn !== publishedOn) {
+        dates.append(el("p", "", "Updated: " + updatedOn));
+      }
+      top.append(badges, dates);
+      inner.append(top);
+
+      inner.append(
         el(
-          "span",
-          "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide border " +
-            (isSampleNotice
-              ? "bg-amber-100 text-amber-900 border-amber-300"
-              : "bg-snow text-brand border-brand/10"),
-          isSampleNotice ? "SAMPLE NOTICE" : "Published notice"
-        ),
-        el(
-          "span",
-          "text-xs sm:text-sm font-semibold " + (isSampleNotice ? "text-amber-800" : "text-slate2"),
-          isSampleNotice ? "Demo" : notice.publishedAt || notice.createdAt ? formatDate(notice.publishedAt || notice.createdAt) : "Today"
+          "h3",
+          "break-words text-xl font-bold leading-snug text-[#1b4fd8] sm:text-[26px]",
+          notice.title || "Hospital notice"
         )
       );
-      card.append(top);
 
-      card.append(
-        el("h3", "font-semibold text-ink text-lg sm:text-xl leading-snug", notice.title || "Hospital notice")
-      );
       if (notice.body) {
-        card.append(
+        inner.append(
           el(
             "p",
-            "text-base sm:text-lg text-slate2 whitespace-pre-wrap break-words leading-7",
+            "whitespace-pre-line break-words text-base leading-7 text-[#4b5563] sm:text-[17px] sm:leading-8",
             notice.body
           )
         );
       }
 
-      const metaParts = [];
-      if (notice.publishedAt) metaParts.push("Published " + formatDateTime(notice.publishedAt));
-      else if (notice.createdAt) metaParts.push("Posted " + formatDateTime(notice.createdAt));
-      if (notice.createdByName) metaParts.push(String(notice.createdByName));
-      if (metaParts.length) {
-        card.append(el("p", "text-sm text-mute pt-2 border-t border-line/70", metaParts.join(" · ")));
-      }
+      const footer = el(
+        "div",
+        "mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] pt-3"
+      );
+      const tags = el("div", "flex flex-wrap items-center gap-2");
+      tags.append(
+        el(
+          "span",
+          "inline-flex items-center rounded px-2.5 py-1 text-xs font-semibold " +
+            (isSampleNotice
+              ? "bg-amber-100 text-amber-900"
+              : "bg-[#e8f0fe] text-[#1b4fd8]"),
+          isSampleNotice ? "Demo content" : "Hospital update"
+        )
+      );
+      tags.append(
+        el(
+          "span",
+          "inline-flex items-center rounded bg-[#f1f5f9] px-2.5 py-1 text-xs font-semibold text-[#475569]",
+          "Patients & visitors"
+        )
+      );
+      footer.append(
+        tags,
+        el(
+          "p",
+          "text-sm font-bold text-[#0f172a]",
+          "By " + String(notice.createdByName || "Hospital administration")
+        )
+      );
+      inner.append(footer);
+
+      card.append(inner);
       list.append(card);
     });
   }

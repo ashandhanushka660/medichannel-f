@@ -4,7 +4,7 @@
 
 | Component | Repository | Host |
 | --- | --- | --- |
-| Next.js frontend | `medichannel-frontend` | Netlify |
+| Next.js frontend | `medichannel-frontend` | Vercel (Netlify alternative) |
 | Spring Boot API | `medichannel-backend` | Render (Docker) |
 | PostgreSQL | Neon project | Neon |
 
@@ -19,14 +19,26 @@ Both repositories deploy from their `main` branch.
 - Required env vars (names only):
   - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (Neon; `DB_URL` must be JDBC and include `sslmode=require`)
   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` (independent Base64-encoded 32+ byte keys)
-  - `APP_FRONTEND_ORIGIN` (exact Netlify URL, no wildcard, no trailing slash)
+  - `APP_FRONTEND_ORIGIN` (exact Vercel URL, no wildcard, no trailing slash)
   - `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD` (first-admin bootstrap; 8+ characters with a letter, a number and a symbol)
   - `APP_DEMO_SEED=false` in production (only enable in isolated staging with `APP_DEMO_PASSWORD=<STRONG_RANDOM_PASSWORD>`)
   - `PORT=8080` (Render also injects `PORT`)
 - WebSocket: `/ws` (STOMP), allowed origin from `APP_FRONTEND_ORIGIN`
 - CORS: frontend origin only
 
-## Netlify (frontend)
+## Vercel (frontend, primary)
+
+- Import the GitHub repository at [vercel.com/new](https://vercel.com/new); framework preset **Next.js**.
+- Branch: `main` (production), all other branches become previews.
+- Build: `npm ci` / `npm run build` (pinned in `vercel.json`).
+- Node: 22 (`engines.node >= 20.9.0` in `package.json`).
+- Required env vars (Project → Settings → Environment Variables):
+  - `API_URL=https://medichannel-backend.onrender.com` (server-side only; no `NEXT_PUBLIC_` prefix)
+- Set Render's `APP_FRONTEND_ORIGIN` to the exact Vercel production origin.
+- The CSP `connect-src` is derived from `API_URL` at build time, so set `API_URL` before the first deploy and redeploy after changing it.
+- WebSocket config route: `/api/realtime/config` returns the backend WS URL derived from `API_URL`.
+
+## Netlify (frontend, alternative)
 
 - Site: `medichannel`
 - Branch: `main`
@@ -71,8 +83,8 @@ Both repositories deploy from their `main` branch.
 ## Post-deploy verification
 
 1. `GET https://<backend>/actuator/health` returns `UP`.
-2. `GET https://<netlify-site>/api/backend/wake` returns `{"status":"ready"}`.
-3. `GET https://<netlify-site>/api/backend/doctors` returns the catalogue.
+2. `GET https://<frontend-site>/api/backend/wake` returns `{"status":"ready"}`.
+3. `GET https://<frontend-site>/api/backend/doctors` returns the catalogue.
 4. Register a patient, sign in, book an appointment, and confirm the queue card updates.
 5. Sign in as ADMIN and confirm audit logs and notices load.
 6. Confirm the browser console shows no CSP violations.

@@ -18,11 +18,11 @@ The repository contains a Next.js frontend and a Spring Boot backend. The backen
 
 ## Deployment Architecture
 
-- Frontend hosting: Netlify (this repository)
+- Frontend hosting: Vercel (this repository), with Netlify as an alternative
 - Backend hosting: Render (separate [`medichannel-backend`](https://github.com/wcm24b126-hue/medichannel-backend) repository)
 - Database hosting: Neon PostgreSQL
 
-This repository contains only the Next.js frontend. The root [`netlify.toml`](./netlify.toml) configures Netlify. The Spring Boot backend, its `Dockerfile`, and its `render.yaml` live in the backend repository.
+This repository contains only the Next.js frontend. The root [`vercel.json`](./vercel.json) configures Vercel and [`netlify.toml`](./netlify.toml) configures the optional Netlify deployment. The Spring Boot backend, its `Dockerfile`, and its `render.yaml` live in the backend repository.
 
 ## User Roles
 
@@ -55,21 +55,30 @@ Never commit database passwords, connection strings, encryption keys, JWT secret
 
 ## Deployment
 
-Deploy in this order: Neon database, Render backend, then Netlify frontend.
+Deploy in this order: Neon database, Render backend, then the Vercel frontend.
 
 1. **Neon:** Create a PostgreSQL project and database. Copy its connection details. Use the pooled hostname if the Neon dashboard offers one, and require SSL.
 2. **Render (backend repository):** Import `medichannel-backend` and create a Blueprint from its root `render.yaml`. The service builds that repository's `Dockerfile`. In the Render service's environment, set:
    - `DB_URL` to a JDBC URL such as `jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require`
    - `DB_USERNAME` and `DB_PASSWORD` to the Neon role credentials
    - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` to independent Base64-encoded 32+ byte keys
-   - `APP_FRONTEND_ORIGIN` to the exact Netlify site origin (for example `https://medichannel.netlify.app`), with no wildcard
+   - `APP_FRONTEND_ORIGIN` to the exact frontend origin (for example `https://medichannel.vercel.app`), with no wildcard
    - `APP_ADMIN_EMAIL` and `APP_ADMIN_PASSWORD` for the first administrator bootstrap (password: 8+ characters with a letter, a number and a symbol)
    - Leave `APP_DEMO_SEED` unset or `false` in production
    Render sets `SPRING_PROFILES_ACTIVE=prod`. Wait for the build and health check (`/actuator/health`) to pass, then copy the `https://...onrender.com` origin.
-3. **Netlify (this repository):** Import this repository. Netlify reads the root `netlify.toml`, runs `npm run lint && npm run build`, publishes `.next`, and applies `@netlify/plugin-nextjs` on Node 22. Set the server-side environment variable `API_URL` to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://medichannel-backend.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Trigger a deploy.
-4. **Verify:** Confirm the Render service reports healthy, open the Netlify site, and check that login, the doctor catalogue, and the wake endpoint work. The CSP is generated at build time from `API_URL`, so set `API_URL` before the first deploy and rebuild after changing it.
+3. **Vercel (this repository):** Import this repository at [vercel.com/new](https://vercel.com/new). Vercel detects Next.js, uses the root `vercel.json` (`npm ci` / `npm run build`), and deploys on every push to `main`. In **Project → Settings → Environment Variables**, add `API_URL` (Production and, if you use them, Preview) set to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://medichannel-backend.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Deploy, then set the Render `APP_FRONTEND_ORIGIN` to the exact Vercel production origin (for example `https://medichannel.vercel.app`) and redeploy the backend.
+4. **Netlify (alternative):** Import this repository. Netlify reads the root `netlify.toml`, runs `npm run lint && npm run build`, publishes `.next`, and applies `@netlify/plugin-nextjs` on Node 22. Set the same server-side `API_URL` variable, then set Render's `APP_FRONTEND_ORIGIN` to the Netlify URL.
+5. **Verify:** Confirm the Render service reports healthy, open the Vercel (or Netlify) site, and check that login, the doctor catalogue, and the wake endpoint work. The CSP is generated at build time from `API_URL`, so set `API_URL` before the first deploy and rebuild after changing it.
 
-Keep all provider credentials in Render/Netlify environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local frontend development, copy `.env.example` to `.env.local` and point `API_URL` at your local or deployed backend. Do not commit local `.env` files.
+#### Vercel notes
+
+- Node 22 is used automatically on Vercel; `package.json` requires Node `>=20.9.0`.
+- `vercel.json` pins the install (`npm ci`) and build (`npm run build`) commands.
+- The `/api/backend/*` routes are server-side, so `API_URL` never reaches the browser.
+- The WebSocket origin is derived from `API_URL` at build time. If you change the backend URL, redeploy the frontend so the CSP `connect-src` entries are regenerated.
+- Preview deployments share the Production `API_URL` unless you add a Preview-scoped value. Render only accepts one `APP_FRONTEND_ORIGIN`, so use the stable production domain for two-user testing.
+
+Keep all provider credentials in Render/Vercel environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local frontend development, copy `.env.example` to `.env.local` and point `API_URL` at your local or deployed backend. Do not commit local `.env` files.
 
 ### Render cold starts and frontend caching
 
@@ -113,7 +122,7 @@ official IT404050 Assignment 2 brief is in
 
 ## Environment Variables
 
-The frontend server reads `API_URL`, which must be the Render backend origin without `/api` or `/api/v1`. `NODE_VERSION=22` is set in `netlify.toml`. The production backend (in the separate backend repository) reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET`, `APP_FRONTEND_ORIGIN`, `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD`, and optionally `APP_DEMO_SEED` / `APP_DEMO_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
+The frontend server reads `API_URL`, which must be the Render backend origin without `/api` or `/api/v1`. On Vercel this is set in **Project → Settings → Environment Variables**; on Netlify `NODE_VERSION=22` is set in `netlify.toml`. The production backend (in the separate backend repository) reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET`, `APP_FRONTEND_ORIGIN`, `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD`, and optionally `APP_DEMO_SEED` / `APP_DEMO_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
 
 ## Team Development
 
