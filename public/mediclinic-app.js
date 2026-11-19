@@ -2388,17 +2388,21 @@
           "Cancellations must be made at least 3 hours before the session.";
       }
 
+      // The button stays active on every row so patients always get an
+      // answer. Where BR-07 blocks the operation, clicking explains why
+      // instead of leaving a dead, greyed-out control.
       const cancelButton = actionButton(
         "Cancel",
         cancelReason
-          ? "bg-white border-line text-mute"
+          ? "bg-white border-rose-200 text-rose-600 hover:bg-rose-50"
           : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
-        "cancel-appointment",
-        appointment.appointmentId
+        cancelReason ? "cancel-help" : "cancel-appointment",
+        cancelReason || appointment.appointmentId
       );
-      if (cancelReason) cancelButton.disabled = true;
       const cancelWrap = el("span", "inline-flex", "");
-      cancelWrap.title = cancelReason || "Cancel this appointment";
+      cancelWrap.title = cancelReason
+        ? "Why this appointment cannot be cancelled"
+        : "Cancel this appointment";
       cancelWrap.append(cancelButton);
       actions.append(cancelWrap);
 
@@ -7294,6 +7298,15 @@
     const checkin = event.target.closest("[data-checkin-appointment]");
     if (checkin) {
       void checkInAppointment(checkin.dataset.checkinAppointment);
+      return;
+    }
+
+    const cancelHelp = event.target.closest("[data-cancel-help]");
+    if (cancelHelp) {
+      setAppMessage(
+        cancelHelp.getAttribute("data-cancel-help"),
+        "warning"
+      );
       return;
     }
 

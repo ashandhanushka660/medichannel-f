@@ -136,11 +136,12 @@ test("the patient profile has a polished identity header and grouped details", (
   assert.match(APP_SOURCE, /querySelector\("\[data-profile-name\]"\)/);
 });
 
-test("every appointment row has a cancel action with a reason when unavailable", () => {
+test("every appointment row has an active cancel action with an explanation when unavailable", () => {
   assert.doesNotMatch(APP_SOURCE, /if \(cancellable\) \{/);
-  assert.match(APP_SOURCE, /const cancelButton = actionButton\(/);
-  assert.match(APP_SOURCE, /if \(cancelReason\) cancelButton\.disabled = true;/);
-  assert.match(APP_SOURCE, /cancelWrap\.title = cancelReason \|\| "Cancel this appointment";/);
+  assert.doesNotMatch(APP_SOURCE, /cancelButton\.disabled = true/);
+  assert.match(APP_SOURCE, /cancelReason \? "cancel-help" : "cancel-appointment"/);
+  assert.match(APP_SOURCE, /event\.target\.closest\("\[data-cancel-help\]"\)/);
+  assert.match(APP_SOURCE, /getAttribute\("data-cancel-help"\)/);
   assert.match(APP_SOURCE, /Paid appointments cannot be cancelled here\./);
 });
 
