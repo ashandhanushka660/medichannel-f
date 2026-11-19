@@ -143,3 +143,26 @@ test("direct Next.js patient pages no longer contradict the implemented API", ()
   assert.doesNotMatch(APPOINTMENTS_PAGE, /not currently exposed by a patient queue API/);
   assert.doesNotMatch(CONSULTATION_PAGE, /will be enabled after the Spring Boot WebSocket service/);
 });
+
+test("chat publishing waits for the real connection instead of throwing a raw transport error", () => {
+  assert.doesNotMatch(APP_SOURCE, /Live updates are not connected yet\./);
+  assert.match(APP_SOURCE, /async function publish\(destination, payload\)/);
+  assert.match(APP_SOURCE, /await getRealtime\(\);/);
+  assert.match(APP_SOURCE, /await waitForConnection\(\);/);
+  assert.match(APP_SOURCE, /Live updates are unavailable right now\. Please try again\./);
+  assert.match(APP_SOURCE, /function notifyConnected\(\)/);
+  assert.match(APP_SOURCE, /function waitForConnection\(/);
+  assert.match(APP_SOURCE, /notifyConnected\(\);/);
+});
+
+test("sending a chat message holds the message until the socket is ready and disables double sends", () => {
+  assert.match(APP_SOURCE, /async function sendChatMessage\(\)/);
+  assert.match(APP_SOURCE, /await publish\("\/app\/appointments\/" \+ appointment\.appointmentId \+ "\/chat"/);
+  assert.match(APP_SOURCE, /if \(sendButton\) sendButton\.disabled = true;/);
+  assert.match(APP_SOURCE, /async function sendTyping\(typing\)/);
+});
+
+test("the empty chat placeholder addresses each role correctly", () => {
+  assert.match(APP_SOURCE, /No messages yet\. Say hello to your patient\./);
+  assert.match(APP_SOURCE, /No messages yet\. Say hello to your doctor\./);
+});

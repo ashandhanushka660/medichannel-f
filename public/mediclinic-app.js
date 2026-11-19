@@ -2655,7 +2655,31 @@
   let stompClient = null;
   let stompReady = null;
   let stompConnected = false;
+  let connectionWaiters = [];
   const subscriptions = new Map();
+
+  function notifyConnected() {
+    stompConnected = true;
+    const waiters = connectionWaiters;
+    connectionWaiters = [];
+    waiters.forEach((resolve) => resolve(stompClient));
+  }
+
+  function waitForConnection(timeoutMs = 15000) {
+    if (stompConnected && stompClient) return Promise.resolve(stompClient);
+
+    return new Promise((resolve, reject) => {
+      const waiter = () => {
+        clearTimeout(timer);
+        resolve(stompClient);
+      };
+      const timer = setTimeout(() => {
+        connectionWaiters = connectionWaiters.filter((w) => w !== waiter);
+        reject(new Error("Live updates are unavailable right now. Please try again."));
+      }, timeoutMs);
+      connectionWaiters.push(waiter);
+    });
+  }
 
   async function getRealtime() {
     if (!S) throw new Error("Sign in to use live updates.");
@@ -2692,7 +2716,7 @@
       };
 
       client.onConnect = () => {
-        stompConnected = true;
+        notifyConnected();
         subscriptions.forEach((entry) => {
           if (entry.subscription) {
             try {
@@ -2784,9 +2808,15 @@
     subscriptions.delete(key);
   }
 
-  function publish(destination, payload) {
+  async function publish(destination, payload) {
+    // Wait until the STOMP handshake has completed. Messages typed before
+    // the socket is ready are held briefly instead of failing with a raw
+    // transport error.
+    await getRealtime();
+    await waitForConnection();
+
     if (!stompConnected || !stompClient) {
-      throw new Error("Live updates are not connected yet.");
+      throw new Error("Live updates are unavailable right now. Please try again.");
     }
 
     stompClient.publish({
@@ -2798,6 +2828,8 @@
   function disconnectRealtime() {
     subscriptions.clear();
     stompConnected = false;
+    connectionWaiters.forEach((resolve) => resolve(null));
+    connectionWaiters = [];
 
     if (stompClient) {
       try {
@@ -4097,13 +4129,10 @@
       log.replaceChildren();
 
       if (!Array.isArray(messages) || !messages.length) {
-        log.append(
-          el(
-            "p",
-            "text-sm text-mute",
-            "No messages yet. Say hello to your doctor."
-          )
-        );
+        const greeting = S && S.role === "DOCTOR"
+          ? "No messages yet. Say hello to your patient."
+          : "No messages yet. Say hello to your doctor.";
+        log.append(el("p", "text-sm text-mute", greeting));
         return;
       }
 
@@ -4218,7 +4247,7 @@
     );
   }
 
-  function sendChatMessage() {
+  async function sendChatMessage() {
     const input = $("consult-c");
     const appointment = state.consult.appointment;
 
@@ -4238,30 +4267,40 @@
       return;
     }
 
+    // Disable send while the message is in flight so a double click cannot
+    // publish the same text twice.
+    const sendButton = document.querySelector("[data-chat-send]");
+    if (sendButton) sendButton.disabled = true;
+
     try {
-      publish("/app/appointments/" + appointment.appointmentId + "/chat", {
+      await publish("/app/appointments/" + appointment.appointmentId + "/chat", {
         content,
       });
 
       input.value = "";
-      sendTyping(false);
+      void sendTyping(false);
     } catch (error) {
-      setAppMessage(error.message);
+      setAppMessage(error.message || "Your message could not be sent. Please try again.");
+    } finally {
+      if (sendButton) {
+        const current = state.consult.appointment;
+        sendButton.disabled = !current || current.status !== "IN_CONSULTATION";
+      }
     }
   }
 
-  function sendTyping(typing) {
+  async function sendTyping(typing) {
     const appointment = state.consult.appointment;
     if (!appointment || appointment.status !== "IN_CONSULTATION") return;
     if (!S || !["CUSTOMER", "DOCTOR"].includes(S.role)) return;
 
     try {
-      publish(
+      await publish(
         "/app/appointments/" + appointment.appointmentId + "/typing",
         { typing: Boolean(typing) }
       );
     } catch {
-      // Typing is best-effort.
+      // Typing is best-effort; never surface a transport error to the user.
     }
   }
 
