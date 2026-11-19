@@ -902,6 +902,25 @@
     return { id, panel: target.panel, consultId: target.consultId };
   }
 
+  function setPrimaryNavCurrent(viewId) {
+    document
+      .querySelectorAll(
+        'nav[aria-label="Pages"] a[href^="#"]:not([data-panel-link])'
+      )
+      .forEach((link) => {
+        const isCurrent = link.getAttribute("href") === "#" + viewId;
+        if (isCurrent) {
+          link.setAttribute("aria-current", "page");
+          link.classList.remove("text-slate2", "hover:bg-snow");
+          link.classList.add("bg-brand", "text-white");
+        } else {
+          link.removeAttribute("aria-current");
+          link.classList.remove("bg-brand", "text-white");
+          link.classList.add("text-slate2", "hover:bg-snow");
+        }
+      });
+  }
+
   function setPanel(view, panelId) {
     if (!view || !panelId) return false;
 
@@ -1232,6 +1251,7 @@
 
       activeView = targetId;
 
+      setPrimaryNavCurrent(targetId);
       initPanels(view, panel);
 
       document.title = view.dataset.title + " · MediChannel";

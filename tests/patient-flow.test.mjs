@@ -130,6 +130,40 @@ test("the patient profile has a polished identity header and grouped details", (
   assert.match(APP_SOURCE, /querySelector\("\[data-profile-name\]"\)/);
 });
 
+test("session cards declare the type badge before appending it", () => {
+  const start = APP_SOURCE.indexOf("function renderSessionCard(");
+  assert.ok(start > -1, "renderSessionCard is missing");
+  const nextFunction = APP_SOURCE.indexOf("\n  function ", start + 10);
+  const body = APP_SOURCE.slice(
+    start,
+    nextFunction > -1 ? nextFunction : start + 6000
+  );
+  const declared = body.indexOf("const typeBadge = badge(");
+  const appended = body.indexOf("badgeRow.append(typeBadge, statusBadge)");
+  assert.ok(declared > -1, "typeBadge is never declared");
+  assert.ok(appended > -1, "typeBadge is never appended to the status row");
+  assert.ok(declared < appended, "typeBadge is used before it is declared");
+});
+
+test("the primary navigation follows the active view", () => {
+  assert.match(APP_SOURCE, /function setPrimaryNavCurrent\(viewId\)/);
+  assert.match(APP_SOURCE, /setPrimaryNavCurrent\(targetId\)/);
+  assert.match(
+    APP_SOURCE,
+    /nav\[aria-label="Pages"\] a\[href\^="#"\]:not\(\[data-panel-link\]\)/
+  );
+});
+
+test("the profile identity header shows a circular picture and right-aligned account details", () => {
+  const marker = HTML_SOURCE.indexOf("data-profile-initials");
+  assert.ok(marker > -1, "profile identity header is missing");
+  const header = HTML_SOURCE.slice(marker - 400, marker + 800);
+  assert.match(header, /patient-avatar\.svg/);
+  assert.match(header, /rounded-full/);
+  assert.match(header, /justify-between/);
+  assert.match(header, /text-right/);
+});
+
 test("every appointment row has an active cancel action with a reason dialog", () => {
   assert.doesNotMatch(APP_SOURCE, /cancelButton\.disabled = true/);
   assert.doesNotMatch(APP_SOURCE, /data-cancel-help/);
