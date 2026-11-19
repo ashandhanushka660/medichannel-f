@@ -211,7 +211,6 @@ export async function POST(request: NextRequest) {
     const result = NextResponse.json(
       {
         user: { id: login.userId, email: login.email, role: login.role },
-        token: login.accessToken,
         profileCreated: true,
         addressSaved: true,
         message: "Account and patient profile created successfully.",

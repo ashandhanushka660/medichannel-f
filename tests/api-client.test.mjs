@@ -17,7 +17,6 @@ function jsonResponse(status, body) {
 
 function loadApi(options = {}) {
   const calls = [];
-  const tabToken = options.tabToken ?? null;
   const sandbox = {
     Headers,
     FormData,
@@ -27,7 +26,8 @@ function loadApi(options = {}) {
     navigator: { onLine: options.online ?? true },
     sessionStorage: {
       getItem(key) {
-        return key === "mc_tab_token" ? tabToken : null;
+        if (options.onSessionStorageGet) options.onSessionStorageGet(key);
+        return null;
       },
     },
     fetch: async (url, settings = {}) => {
@@ -292,12 +292,31 @@ test("network failures are reported without leaking internals", async () => {
   );
 });
 
-test("the access token stays in the Authorization header, never the URL", async () => {
-  const { MC, calls } = loadApi({ tabToken: "test-tab-token" });
+test("browser API requests do NOT read REST JWT from sessionStorage or send Authorization header", async () => {
+  let sessionStorageAccessed = false;
+  const { MC, calls } = loadApi({
+    onSessionStorageGet(key) {
+      if (key === "mc_tab_token") sessionStorageAccessed = true;
+    },
+  });
   await MC.managerNotices();
 
-  assert.equal(calls[0].settings.headers.get("Authorization"), "Bearer test-tab-token");
-  assert.doesNotMatch(calls[0].url, /test-tab-token/);
+  assert.equal(sessionStorageAccessed, false);
+  assert.equal(calls[0].settings.headers.has("Authorization"), false);
+  assert.equal(calls[0].settings.credentials, "same-origin");
+  assert.doesNotMatch(calls[0].url, /token/i);
+});
+
+test("wsTicket requests ws-ticket through BFF with same-origin credentials and no Authorization header", async () => {
+  const { MC, calls } = loadApi({
+    fetchImpl: () => jsonResponse(200, { ticket: "temp-ticket", expiresInSeconds: 60 }),
+  });
+  const res = await MC.wsTicket();
+
+  assert.equal(calls[0].url, "/api/backend/auth/ws-ticket");
+  assert.equal(calls[0].settings.credentials, "same-origin");
+  assert.equal(calls[0].settings.headers.has("Authorization"), false);
+  assert.equal(res.ticket, "temp-ticket");
 });
 
 test("me() returns null for an anonymous session", async () => {

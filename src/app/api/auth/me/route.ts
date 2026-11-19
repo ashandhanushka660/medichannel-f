@@ -11,10 +11,7 @@ type CurrentUser = {
 const roles = new Set(["CUSTOMER", "DOCTOR", "MANAGER", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
-  const incomingAuth = request.headers.get("authorization");
-  const token = (incomingAuth && incomingAuth.startsWith("Bearer "))
-    ? incomingAuth.substring(7).trim()
-    : readAuthToken(request);
+  const token = readAuthToken(request);
   if (!token) {
     return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   }

@@ -1452,7 +1452,7 @@
     if (!user || !HOME[user.role]) {
       S = null;
       try { localStorage.removeItem("mc-active-user"); } catch {}
-      try { sessionStorage.removeItem("mc_tab_user"); sessionStorage.removeItem("mc_tab_token"); } catch {}
+      try { sessionStorage.removeItem("mc_tab_user"); } catch {}
       if (state.doctor.pollTimer) clearInterval(state.doctor.pollTimer);
       state.doctor.pollTimer = null;
       if (state.patientPollTimer) clearInterval(state.patientPollTimer);
@@ -7517,12 +7517,6 @@
         return;
       }
 
-      if (result.token) {
-        try {
-          sessionStorage.setItem("mc_tab_token", result.token);
-        } catch {}
-      }
-
       setSession(result.user);
       form.reset();
       render();
@@ -7599,11 +7593,6 @@
       }
 
       if (result.user && HOME[result.user.role]) {
-        if (result.token) {
-          try {
-            sessionStorage.setItem("mc_tab_token", result.token);
-          } catch {}
-        }
         setSession(result.user);
         form.reset();
         render();
@@ -7635,7 +7624,6 @@
 
     S = null;
     try {
-      sessionStorage.removeItem("mc_tab_token");
       sessionStorage.removeItem("mc_tab_user");
     } catch {}
     disconnectRealtime();

@@ -21,3 +21,9 @@ test("the proxy never builds a bodyful response for 204/205/304", () => {
 test("the proxy forwards DELETE requests to the backend", () => {
   assert.match(ROUTE, /export const DELETE = forwardRequest;/);
 });
+
+test("the proxy authenticates solely via readAuthToken without client Authorization override", () => {
+  assert.match(ROUTE, /const token = readAuthToken\(request\);/);
+  assert.doesNotMatch(ROUTE, /incomingAuth/);
+  assert.doesNotMatch(ROUTE, /request\.headers\.get\("authorization"\)/i);
+});
