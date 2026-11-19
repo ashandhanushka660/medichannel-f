@@ -109,12 +109,6 @@ test("a consultation deep link resolves a specific appointment", async () => {
   );
 });
 
-test("patient cancellation is limited to pending bookings", () => {
-  assert.match(APP_SOURCE, /appointment\.status === "BOOKED"/);
-  assert.match(APP_SOURCE, /appointment\.paymentStatus !== "PENDING"/);
-  assert.match(APP_SOURCE, /session\.remainingAppointments \?\?/);
-});
-
 test("the SPA exposes patient profile management", () => {
   assert.match(HTML_SOURCE, /<section data-view="profile"/);
   assert.match(HTML_SOURCE, /href="#profile"[^>]*>My profile<\/a>/);
@@ -136,13 +130,16 @@ test("the patient profile has a polished identity header and grouped details", (
   assert.match(APP_SOURCE, /querySelector\("\[data-profile-name\]"\)/);
 });
 
-test("every appointment row has an active cancel action with an explanation when unavailable", () => {
-  assert.doesNotMatch(APP_SOURCE, /if \(cancellable\) \{/);
+test("every appointment row has an active cancel action with a reason dialog", () => {
   assert.doesNotMatch(APP_SOURCE, /cancelButton\.disabled = true/);
-  assert.match(APP_SOURCE, /cancelReason \? "cancel-help" : "cancel-appointment"/);
-  assert.match(APP_SOURCE, /event\.target\.closest\("\[data-cancel-help\]"\)/);
-  assert.match(APP_SOURCE, /getAttribute\("data-cancel-help"\)/);
-  assert.match(APP_SOURCE, /Paid appointments cannot be cancelled here\./);
+  assert.doesNotMatch(APP_SOURCE, /data-cancel-help/);
+  assert.match(APP_SOURCE, /"cancel-appointment",\s*appointment\.appointmentId/);
+  assert.match(APP_SOURCE, /Reason for cancellation/);
+  assert.match(APP_SOURCE, /"Confirm"/);
+  assert.match(APP_SOURCE, /"Deny"/);
+  assert.match(APP_SOURCE, /MC\.cancelAppointment\(appointmentId, reason\)/);
+  assert.match(API_SOURCE, /cancelAppointment\(appointmentId, reason\)/);
+  assert.match(API_SOURCE, /body: \{ reason \}/);
 });
 
 test("online consultation, summary and feedback flows are complete", () => {

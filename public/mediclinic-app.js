@@ -2362,46 +2362,17 @@
         actions.append(consultButton);
       }
 
-      if (appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
-        actions.append(
-          el("span", "text-[11px] text-mute block leading-tight", "Paid (non-refundable)")
-        );
-      }
-
-      // BR-07: patients may cancel only unpaid, still-booked appointments
-      // that are more than 3 hours before the session. Paid appointments
-      // are non-refundable and must be cancelled by a manager/administrator.
-      // Keep the action on every row, but disable it with a clear reason when
-      // the backend rule does not allow a patient-initiated cancellation.
-      let cancelReason = "";
-      if (appointment.status === "CANCELLED") {
-        cancelReason = "This appointment is already cancelled.";
-      } else if (appointment.status === "COMPLETED") {
-        cancelReason = "Completed appointments cannot be cancelled.";
-      } else if (appointment.paymentStatus !== "PENDING") {
-        cancelReason =
-          "Paid appointments cannot be cancelled here. Please contact reception to arrange a cancellation or refund.";
-      } else if (appointment.status !== "BOOKED") {
-        cancelReason = "Only booked appointments can be cancelled.";
-      } else if (!canCancel(appointment)) {
-        cancelReason =
-          "Cancellations must be made at least 3 hours before the session.";
-      }
-
-      // The button stays active on every row so patients always get an
-      // answer. Where BR-07 blocks the operation, clicking explains why
-      // instead of leaving a dead, greyed-out control.
+      // Demo rule: patients can cancel any of their own appointments.
+      // The confirmation dialog collects the reason before calling the API.
       const cancelButton = actionButton(
         "Cancel",
-        cancelReason
-          ? "bg-white border-rose-200 text-rose-600 hover:bg-rose-50"
-          : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
-        cancelReason ? "cancel-help" : "cancel-appointment",
-        cancelReason || appointment.appointmentId
+        "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+        "cancel-appointment",
+        appointment.appointmentId
       );
       const cancelWrap = el("span", "inline-flex", "");
-      cancelWrap.title = cancelReason
-        ? "Why this appointment cannot be cancelled"
+      cancelWrap.title = appointment.status === "CANCELLED"
+        ? "This appointment is already cancelled"
         : "Cancel this appointment";
       cancelWrap.append(cancelButton);
       actions.append(cancelWrap);
@@ -2409,18 +2380,6 @@
       row.append(actions);
       tbody.append(row);
     });
-  }
-
-  function canCancel(appointment) {
-    if (!appointment.sessionDate) return false;
-    const start = new Date(
-      appointment.sessionDate +
-        "T" +
-        (appointment.sessionStartTime || "00:00") +
-        ":00"
-    );
-    if (Number.isNaN(start.getTime())) return false;
-    return Date.now() < start.getTime() - 3 * 60 * 60 * 1000;
   }
 
   function actionButton(label, tone, name, id) {
@@ -2604,71 +2563,124 @@
 
   function confirmAppointmentCancel(appointmentId) {
     const notice = $("app-session-warning");
-    if (!notice) return Promise.resolve(false);
+    if (!notice) return Promise.resolve(null);
 
     const appointment = (Array.isArray(state.appointments) ? state.appointments : [])
       .concat(Array.isArray(state.manager && state.manager.reception) ? state.manager.reception : [])
       .find((item) => item && String(item.appointmentId) === String(appointmentId));
 
     return new Promise((resolve) => {
+      const overlay = el(
+        "div",
+        "fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4"
+      );
+      document.body.append(overlay);
+      overlay.append(notice);
+
       notice.hidden = false;
       notice.className =
-        "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-rose-200 bg-white px-4 py-3 text-sm text-ink shadow-lg";
+        "w-full max-w-md rounded-xl border border-line bg-white p-5 text-ink shadow-xl";
       notice.replaceChildren();
 
-      const wrap = el("div", "flex flex-wrap items-center gap-2 sm:gap-3");
-      const message = appointment
-        ? "Cancel appointment " +
-          referenceOf(appointment.bookingReference) +
-          (appointment.doctorName ? " with " + doctorName(appointment) : "") +
-          "? This cannot be undone."
-        : "Cancel this appointment? This cannot be undone.";
-      wrap.append(el("span", "font-medium text-slate2", message));
-
-      const yes = el(
-        "button",
-        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-600 border-rose-600 text-white hover:bg-rose-700 min-h-9 px-3 py-1.5 text-xs",
-        "Yes"
+      const title = el(
+        "h2",
+        "text-base font-semibold text-ink",
+        "Cancel this appointment?"
       );
-      yes.type = "button";
-      const no = el(
+      const message = el(
+        "p",
+        "mt-1 text-sm text-mute",
+        appointment
+          ? "Booking " +
+              referenceOf(appointment.bookingReference) +
+              (appointment.doctorName ? " with " + doctorName(appointment) : "") +
+              ". Tell us why you are cancelling, then confirm or deny."
+          : "Tell us why you are cancelling, then confirm or deny."
+      );
+
+      const label = el(
+        "label",
+        "mt-4 block text-xs font-semibold text-slate2",
+        "Reason for cancellation"
+      );
+      label.htmlFor = "cancel-reason";
+
+      const input = document.createElement("textarea");
+      input.id = "cancel-reason";
+      input.rows = 3;
+      input.maxLength = 500;
+      input.placeholder = "e.g. I can no longer attend this appointment";
+      input.className =
+        "mt-1 w-full px-3 py-2 text-sm border border-line rounded-lg bg-white text-ink focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
+
+      const error = el(
+        "p",
+        "mt-1 text-xs text-rose-600",
+        "Please enter a reason before confirming."
+      );
+      error.hidden = true;
+
+      const actions = el("div", "mt-5 flex flex-wrap justify-end gap-2");
+      const deny = el(
         "button",
         "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs",
-        "No"
+        "Deny"
       );
-      no.type = "button";
+      deny.type = "button";
+      const confirm = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-600 border-rose-600 text-white hover:bg-rose-700 min-h-9 px-3 py-1.5 text-xs",
+        "Confirm"
+      );
+      confirm.type = "button";
 
       let settled = false;
-      const finish = (value) => {
+      const finish = (reason) => {
         if (settled) return;
         settled = true;
-        yes.disabled = true;
-        no.disabled = true;
+        overlay.remove();
+        document.body.append(notice);
         notice.replaceChildren();
-        notice.className =
-          "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg";
         notice.hidden = true;
-        resolve(value);
+        resolve(reason);
       };
 
-      yes.addEventListener("click", () => finish(true));
-      no.addEventListener("click", () => finish(false));
-      wrap.append(yes, no);
-      notice.append(wrap);
+      deny.addEventListener("click", () => finish(null));
+      confirm.addEventListener("click", () => {
+        const reason = input.value.trim();
+        if (!reason) {
+          error.hidden = false;
+          input.focus();
+          return;
+        }
+        finish(reason);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          confirm.click();
+        }
+      });
+
+      actions.append(deny, confirm);
+      notice.append(title, message, label, input, error, actions);
+      setTimeout(() => input.focus(), 0);
     });
   }
 
   async function cancelAppointment(appointmentId) {
-    const confirmed = await confirmAppointmentCancel(appointmentId);
-    if (!confirmed) return;
+    const reason = await confirmAppointmentCancel(appointmentId);
+    if (!reason) return;
 
     try {
-      await MC.cancelAppointment(appointmentId);
+      await MC.cancelAppointment(appointmentId, reason);
       await Promise.allSettled([loadAppointments(), loadSessions()]);
       if (state.manager.receptionLoaded) {
         await loadManagerReception({ silent: true });
       }
-      setAppMessage("Your appointment is cancelled successfully.", "success");
+      setAppMessage(
+        "Your appointment is cancelled successfully. Your reason has been recorded.",
+        "success"
+      );
     } catch (error) {
       setAppMessage(error.message, "error");
     }
@@ -7298,15 +7310,6 @@
     const checkin = event.target.closest("[data-checkin-appointment]");
     if (checkin) {
       void checkInAppointment(checkin.dataset.checkinAppointment);
-      return;
-    }
-
-    const cancelHelp = event.target.closest("[data-cancel-help]");
-    if (cancelHelp) {
-      setAppMessage(
-        cancelHelp.getAttribute("data-cancel-help"),
-        "warning"
-      );
       return;
     }
 

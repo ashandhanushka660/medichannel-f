@@ -429,10 +429,10 @@
       });
     },
 
-    cancelAppointment(appointmentId) {
+    cancelAppointment(appointmentId, reason) {
       return request(
         "appointments/" + encodeURIComponent(appointmentId) + "/cancel",
-        { method: "PATCH", body: {} }
+        { method: "PATCH", body: { reason } }
       );
     },
 
