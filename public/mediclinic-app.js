@@ -16,6 +16,445 @@
   const views = Array.from(document.querySelectorAll("[data-view]"));
   const TZ = "Asia/Colombo";
   const ManagerUI = window.MCManager;
+  const prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  );
+  const motionStyle = document.createElement("style");
+  motionStyle.textContent = `
+    .mc-motion-button:not(:disabled) {
+      transition: transform 180ms cubic-bezier(.22,1,.36,1), box-shadow 180ms ease,
+        background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+    }
+    .mc-motion-cta {
+      transition: transform 180ms cubic-bezier(.22,1,.36,1), box-shadow 180ms ease,
+        filter 180ms ease, background-color 180ms ease;
+    }
+    .mc-motion-cta > span[aria-hidden="true"] {
+      display: inline-block;
+      transition: transform 180ms cubic-bezier(.22,1,.36,1);
+    }
+    .mc-motion-link {
+      transition: color 160ms ease, opacity 160ms ease;
+    }
+    .mc-motion-control {
+      transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+    }
+    .mc-motion-card {
+      transition: transform 280ms cubic-bezier(.22,1,.36,1), box-shadow 280ms ease,
+        border-color 280ms ease;
+    }
+    .mc-motion-status {
+      transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease;
+    }
+
+    /* Hero Image Interactive Depth */
+    .mc-motion-hero-image {
+      transition: transform 380ms cubic-bezier(.22,1,.36,1),
+        box-shadow 380ms cubic-bezier(.22,1,.36,1),
+        border-color 380ms ease;
+      will-change: transform, box-shadow;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .mc-motion-hero-image:hover {
+        transform: scale(1.012);
+        box-shadow: 0 20px 48px -10px rgba(27,58,75,.16),
+          0 0 0 1px rgba(43,122,158,.28),
+          0 0 24px rgba(43,122,158,.12);
+      }
+    }
+
+    /* Connected Patient Journey Background Network */
+    .mc-journey-network {
+      transition: opacity 800ms ease;
+    }
+    .mc-journey-highway {
+      transition: stroke-dashoffset 850ms cubic-bezier(.22,1,.36,1), opacity 600ms ease;
+    }
+    .mc-journey-node {
+      transition: transform 420ms cubic-bezier(.22,1,.36,1), opacity 420ms ease;
+    }
+    .mc-node-halo {
+      transition: transform 500ms ease, opacity 500ms ease;
+    }
+    .mc-node-halo-accent {
+      transition: transform 500ms ease, opacity 500ms ease;
+    }
+
+    /* Signature CTA & Journey Lead Track */
+    .mc-cta-wrapper {
+      position: relative;
+    }
+    .mc-cta-track {
+      transition: opacity 220ms ease, transform 220ms cubic-bezier(.22,1,.36,1);
+      opacity: 0.55;
+    }
+    .mc-cta-track-line {
+      transition: stroke 220ms ease, stroke-opacity 220ms ease;
+    }
+    .mc-cta-travel-pulse {
+      opacity: 0;
+      transition: cx 320ms cubic-bezier(.22,1,.36,1), opacity 220ms ease;
+    }
+    .mc-cta-primary {
+      transition: transform 180ms cubic-bezier(.22,1,.36,1),
+        box-shadow 180ms ease,
+        filter 180ms ease,
+        background-color 180ms ease;
+    }
+    .mc-cta-primary > span[aria-hidden="true"] {
+      display: inline-block;
+      transition: transform 180ms cubic-bezier(.22,1,.36,1);
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .mc-motion-button:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(26,77,102,.12);
+      }
+      .mc-motion-cta:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.02);
+      }
+      .mc-motion-cta:not(.bg-peach):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 5px 14px rgba(26,77,102,.12);
+      }
+      .mc-motion-cta:hover > span[aria-hidden="true"] {
+        transform: translateX(3px);
+      }
+      .mc-motion-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 28px rgba(27,58,75,.12);
+        border-color: rgba(43,122,158,.38);
+      }
+      .mc-cta-wrapper:hover .mc-cta-track,
+      .mc-cta-wrapper:focus-within .mc-cta-track {
+        opacity: 1;
+        transform: translateX(2px);
+      }
+      .mc-cta-wrapper:hover .mc-cta-track-line,
+      .mc-cta-wrapper:focus-within .mc-cta-track-line {
+        stroke: rgba(232,115,74,.6);
+      }
+      .mc-cta-wrapper:hover .mc-cta-travel-pulse,
+      .mc-cta-wrapper:focus-within .mc-cta-travel-pulse {
+        opacity: 0.95;
+        cx: 68px;
+      }
+      .mc-cta-primary:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.03);
+        box-shadow: 0 14px 30px rgba(232,115,74,.48);
+      }
+      .mc-cta-primary:hover > span[aria-hidden="true"] {
+        transform: translateX(4px);
+      }
+    }
+    .mc-motion-button:not(:disabled):active,
+    .mc-motion-cta:active {
+      transform: translateY(0) scale(.985);
+      filter: brightness(.99);
+    }
+    .mc-cta-primary:active {
+      transform: translateY(0) scale(.985);
+      filter: brightness(.98);
+      box-shadow: 0 6px 16px rgba(232,115,74,.35);
+    }
+    .mc-cta-wrapper:active .mc-cta-travel-pulse {
+      cx: 72px;
+      opacity: 1;
+    }
+    .mc-motion-link:active {
+      opacity: .84;
+    }
+
+    /* "How It Works" Journey Cards & Connectors */
+    .wcards {
+      position: relative;
+    }
+    .mc-step-card {
+      position: relative;
+      transition: transform 280ms cubic-bezier(.22,1,.36,1),
+        box-shadow 280ms ease,
+        border-color 280ms ease;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .mc-step-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 14px 32px rgba(27,58,75,.12);
+        border-color: rgba(43,122,158,.35);
+      }
+    }
+    .mc-step-badge {
+      transition: transform 260ms cubic-bezier(.22,1,.36,1),
+        box-shadow 260ms ease,
+        background-color 260ms ease;
+    }
+    @media (min-width: 768px) {
+      .mc-step-card:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        top: 50px;
+        right: -13px;
+        width: 22px;
+        height: 2px;
+        background: linear-gradient(90deg, #2B7A9E, rgba(232,115,74,.7));
+        opacity: 0.28;
+        z-index: 5;
+        pointer-events: none;
+        transition: opacity 300ms ease, transform 300ms ease;
+      }
+      .mc-step-card.mc-step-active:not(:last-child)::after {
+        opacity: 0.85;
+        transform: scaleX(1.05);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mc-motion-button,
+      .mc-motion-cta,
+      .mc-motion-link,
+      .mc-motion-control,
+      .mc-motion-card,
+      .mc-motion-hero-image,
+      .mc-motion-status,
+      .mc-journey-network,
+      .mc-journey-highway,
+      .mc-journey-node,
+      .mc-node-halo,
+      .mc-node-halo-accent,
+      .mc-cta-track,
+      .mc-cta-track-line,
+      .mc-cta-travel-pulse,
+      .mc-cta-primary,
+      .mc-cta-primary > span[aria-hidden="true"],
+      .mc-step-card,
+      .mc-step-badge,
+      .mc-step-card::after {
+        transition: none !important;
+        animation: none !important;
+        transform: none !important;
+      }
+      .mc-journey-highway {
+        stroke-dashoffset: 0 !important;
+      }
+      .mc-cta-track {
+        opacity: 0.5 !important;
+      }
+      .mc-cta-travel-pulse {
+        display: none !important;
+      }
+      .mc-step-card:not(:last-child)::after {
+        opacity: 0.4 !important;
+        transform: none !important;
+      }
+      .mc-motion-button:not(:disabled):hover,
+      .mc-motion-button:not(:disabled):active,
+      .mc-motion-cta:hover,
+      .mc-motion-cta:active,
+      .mc-motion-card:hover,
+      .mc-motion-hero-image:hover,
+      [data-view="welcome"] .wcards > div:hover {
+        transform: none !important;
+        filter: none !important;
+        box-shadow: none !important;
+      }
+      .app-boot-spinner {
+        animation: none !important;
+      }
+    }
+  `;
+  document.head.appendChild(motionStyle);
+
+  const activeMotionByElement = new WeakMap();
+  const activeMotionAnimations = new Set();
+  const pendingScrollReveals = new Set();
+  let scrollRevealObserver = null;
+
+  function playMotion(element, keyframes, settings) {
+    if (
+      !element ||
+      prefersReducedMotion.matches ||
+      typeof element.animate !== "function"
+    ) {
+      return null;
+    }
+
+    const previous = activeMotionByElement.get(element);
+    if (previous) previous.cancel();
+
+    const options = settings || {};
+    const animation = element.animate(keyframes, {
+      duration: options.duration || 300,
+      delay: options.delay || 0,
+      easing: options.easing || "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: options.fill || "none",
+    });
+
+    activeMotionByElement.set(element, animation);
+    activeMotionAnimations.add(animation);
+
+    const forget = () => {
+      if (activeMotionByElement.get(element) === animation) {
+        activeMotionByElement.delete(element);
+      }
+      activeMotionAnimations.delete(animation);
+    };
+    animation.addEventListener("finish", forget, { once: true });
+    animation.addEventListener("cancel", forget, { once: true });
+    return animation;
+  }
+
+  function animateEntry(element, delay, duration) {
+    return playMotion(
+      element,
+      [
+        { opacity: 0, transform: "translateY(10px) scale(.995)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+      ],
+      { duration: duration || 420, delay: delay || 0 }
+    );
+  }
+
+  function animateStateChange(element) {
+    return playMotion(
+      element,
+      [
+        { opacity: 0.72, transform: "translateY(3px) scale(.99)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+      ],
+      { duration: 260 }
+    );
+  }
+
+  function setMotionText(element, value) {
+    if (!element) return;
+    const next = String(value);
+    if (element.textContent === next) return;
+    element.textContent = next;
+    animateStateChange(element);
+  }
+
+  function enhanceMotionTree(root) {
+    if (!root || root.nodeType !== 1) return;
+    const nodes = [root, ...root.querySelectorAll(
+      "button, a[href], input, select, textarea, article"
+    )];
+
+    nodes.forEach((node) => {
+      if (node.closest("#lang-btn")) return;
+      if (node.matches("button")) node.classList.add("mc-motion-button");
+      if (node.matches("a.cta")) node.classList.add("mc-motion-cta");
+      else if (node.matches("a[href]")) node.classList.add("mc-motion-link");
+      if (node.matches("input, select, textarea")) {
+        node.classList.add("mc-motion-control");
+      }
+      if (
+        node.matches("article") &&
+        node.querySelector("button:not(:disabled), a[href]")
+      ) {
+        node.classList.add("mc-motion-card");
+      }
+    });
+  }
+
+  function clearPendingScrollReveal(element) {
+    element.style.opacity = "";
+    element.style.transform = "";
+    pendingScrollReveals.delete(element);
+    if (scrollRevealObserver) scrollRevealObserver.unobserve(element);
+  }
+
+  function setupPublicScrollReveals() {
+    const welcome = document.querySelector('[data-view="welcome"]');
+    if (
+      !welcome ||
+      prefersReducedMotion.matches ||
+      typeof IntersectionObserver === "undefined" ||
+      typeof Element.prototype.animate !== "function"
+    ) {
+      return;
+    }
+
+    const cards = Array.from(welcome.querySelectorAll(".wcards > div"));
+    if (!cards.length) return;
+
+    scrollRevealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const element = entry.target;
+          scrollRevealObserver.unobserve(element);
+          const index = cards.indexOf(element);
+
+          const animation = playMotion(
+            element,
+            [
+              { opacity: 0, transform: "translateY(16px)" },
+              { opacity: 1, transform: "translateY(0)" },
+            ],
+            { duration: 420, delay: Math.max(0, index) * 160, fill: "both" }
+          );
+
+          // Step badge subtle micro-pulse
+          const badge = element.querySelector(".mc-step-badge");
+          if (badge) {
+            playMotion(
+              badge,
+              [
+                { transform: "scale(0.92)", opacity: 0.8 },
+                { transform: "scale(1.08)", opacity: 1 },
+                { transform: "scale(1)", opacity: 1 },
+              ],
+              { duration: 320, delay: Math.max(0, index) * 160 + 100 }
+            );
+          }
+
+          // Sequential progression: illuminate connector
+          setTimeout(() => {
+            element.classList.add("mc-step-active");
+          }, Math.max(0, index) * 160 + 80);
+
+          if (!animation) {
+            clearPendingScrollReveal(element);
+            return;
+          }
+          const clear = () => {
+            clearPendingScrollReveal(element);
+            if (animation.playState !== "idle") animation.cancel();
+          };
+          animation.addEventListener("finish", clear, { once: true });
+          animation.addEventListener("cancel", clear, { once: true });
+        });
+      },
+      { threshold: 0.15, rootMargin: "0px 0px -6% 0px" }
+    );
+
+    cards.forEach((card) => {
+      card.style.opacity = "0";
+      card.style.transform = "translateY(16px)";
+      pendingScrollReveals.add(card);
+      scrollRevealObserver.observe(card);
+    });
+  }
+
+  function handleReducedMotionChange() {
+    if (!prefersReducedMotion.matches) return;
+    activeMotionAnimations.forEach((animation) => animation.cancel());
+    Array.from(pendingScrollReveals).forEach(clearPendingScrollReveal);
+  }
+
+  if (prefersReducedMotion.addEventListener) {
+    prefersReducedMotion.addEventListener("change", handleReducedMotionChange);
+  } else if (prefersReducedMotion.addListener) {
+    prefersReducedMotion.addListener(handleReducedMotionChange);
+  }
+
+  enhanceMotionTree(document.body);
+  new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach(enhanceMotionTree);
+    });
+  }).observe(document.body, { childList: true, subtree: true });
 
   const RB = {
     CUSTOMER: [
@@ -260,10 +699,13 @@
 
   function setStatus(node, message, isError) {
     if (!node) return;
-    node.textContent = message || "";
+    const next = message || "";
+    const changed = node.textContent !== next;
+    node.textContent = next;
     node.hidden = !message;
     node.classList.toggle("text-bad", Boolean(isError));
     node.classList.toggle("text-slate2", !isError);
+    if (changed && message) animateStateChange(node);
   }
 
   function preserveScroll(mutation) {
@@ -637,6 +1079,134 @@
     }
   }
 
+  let welcomeEntrancePlayed = false;
+  let statsAnimationPlayed = false;
+
+  function playStatsCounter() {
+    if (statsAnimationPlayed) return;
+    statsAnimationPlayed = true;
+
+    const welcome = document.querySelector('[data-view="welcome"]');
+    const stats = welcome && welcome.querySelector("main .grid-cols-3");
+    if (!stats) return;
+
+    const valueEls = Array.from(stats.querySelectorAll(".text-2xl"));
+    if (valueEls.length !== 3) return;
+
+    if (prefersReducedMotion.matches) {
+      valueEls[0].textContent = "40+";
+      valueEls[1].textContent = "15";
+      valueEls[2].textContent = "120+";
+      return;
+    }
+
+    const items = [
+      { target: 40, suffix: "+" },
+      { target: 15, suffix: "" },
+      { target: 120, suffix: "+" },
+    ];
+
+    const duration = 500;
+    const startTime = performance.now();
+
+    function step(now) {
+      const elapsed = Math.min(now - startTime, duration);
+      const progress = 1 - Math.pow(1 - elapsed / duration, 3);
+
+      items.forEach((item, index) => {
+        const val = Math.round(item.target * progress);
+        valueEls[index].textContent = `${val}${item.suffix}`;
+      });
+
+      if (elapsed < duration) {
+        requestAnimationFrame(step);
+      } else {
+        valueEls[0].textContent = "40+";
+        valueEls[1].textContent = "15";
+        valueEls[2].textContent = "120+";
+      }
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  function playWelcomeEntrance() {
+    if (welcomeEntrancePlayed) return;
+    welcomeEntrancePlayed = true;
+
+    const welcome = document.querySelector('[data-view="welcome"]');
+    if (!welcome) return;
+
+    // 1. Background Network "Wake Up" Sequence
+    const highway = welcome.querySelector(".mc-journey-highway");
+    const network = welcome.querySelector(".mc-journey-network");
+    const nodes = Array.from(welcome.querySelectorAll(".mc-journey-node"));
+
+    if (!prefersReducedMotion.matches) {
+      if (highway) {
+        highway.style.strokeDashoffset = "1200";
+        playMotion(
+          highway,
+          [
+            { strokeDashoffset: "1200", opacity: 0.4 },
+            { strokeDashoffset: "0", opacity: 1 },
+          ],
+          { duration: 750, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" }
+        );
+      }
+
+      nodes.forEach((node, idx) => {
+        playMotion(
+          node,
+          [
+            { transform: "scale(0)", opacity: 0 },
+            { transform: "scale(1.2)", opacity: 1 },
+            { transform: "scale(1)", opacity: 0.9 },
+          ],
+          { duration: 420, delay: 120 * idx, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" }
+        );
+      });
+
+      if (network) {
+        setTimeout(() => {
+          if (!prefersReducedMotion.matches) {
+            network.style.opacity = "0.38";
+          }
+        }, 850);
+      }
+    } else {
+      if (highway) highway.style.strokeDashoffset = "0";
+      if (network) network.style.opacity = "0.3";
+    }
+
+    // 2. Cinematic Hero Sequence
+    const textColumn = welcome.querySelector("main > div.relative > div.grid > div.grid");
+    if (!textColumn) return;
+
+    const heading = textColumn.querySelector("h1");
+    const actionGroup = textColumn.querySelector("div.flex.flex-wrap");
+    const accountPrompt = actionGroup && actionGroup.parentElement
+      ? actionGroup.parentElement.querySelector("p")
+      : null;
+    const elements = [
+      textColumn.querySelector("p.inline-flex"),
+      heading,
+      heading ? heading.nextElementSibling : null,
+      actionGroup,
+      accountPrompt,
+      textColumn.querySelector("ul"),
+      welcome.querySelector("main figure"),
+      welcome.querySelector("main .grid-cols-3"),
+    ].filter(Boolean);
+
+    elements.forEach((element, index) => {
+      animateEntry(element, index * 55, 420);
+    });
+
+    // 3. Statistics moment (count-up from 0)
+    setTimeout(playStatsCounter, 450);
+  }
+
   function showView(id, panel, options) {
     const settings = options || {};
     const view = views.find((item) => item.dataset.view === id) || views[0];
@@ -683,6 +1253,11 @@
       }
 
       window.scrollTo(0, 0);
+      if (targetId === "welcome") {
+        playWelcomeEntrance();
+      } else {
+        animateEntry(view, 0, 320);
+      }
     } else if (panel) {
       setPanel(view, panel);
     }
@@ -1246,6 +1821,7 @@
     }
 
     container.append(toast);
+    animateEntry(toast, 0, 260);
 
     dismissTimer = setTimeout(dismiss, 10000);
   }
@@ -1310,12 +1886,23 @@
     const list = document.querySelector("[data-session-list]");
     if (!list) return;
 
+    const previousStatuses = new Map(
+      Array.from(list.querySelectorAll("[data-motion-session]")).map((card) => [
+        card.dataset.motionSession,
+        card.dataset.motionStatus,
+      ])
+    );
     list.replaceChildren();
 
     if (!state.sessions.length) return;
 
     state.sessions.forEach((session) => {
-      list.append(renderSessionCard(session));
+      list.append(
+        renderSessionCard(
+          session,
+          previousStatuses.get(String(session.sessionId))
+        )
+      );
     });
   }
 
@@ -1695,12 +2282,15 @@
     }
   }
 
-  function renderSessionCard(session) {
+  function renderSessionCard(session, previousStatus) {
     const card = el(
       "article",
       "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm [&>h2]:mb-3 grid gap-4"
     );
+    const currentStatus = session.status || "";
     card.dataset.sessionCard = session.sessionId;
+    card.dataset.motionSession = String(session.sessionId);
+    card.dataset.motionStatus = currentStatus;
 
     const header = el(
       "div",
@@ -1720,15 +2310,22 @@
         ].join(" · ")
       )
     );
-
-    const typeBadge = badge(
-      session.consultationType === "ONLINE" ? "Online" : "Physical",
-      "blue"
-    );
     const statusBadge = badge(
       session.status === "OPEN" ? "Available" : session.status === "IN_PROGRESS" ? "In progress" : session.status === "COMPLETED" ? "Completed" : session.status === "CANCELLED" ? "Cancelled" : "Not available",
       session.status === "OPEN" ? "green" : session.status === "IN_PROGRESS" ? "orange" : "slate"
     );
+    statusBadge.classList.add("mc-motion-status");
+    header.append(
+      names,
+      badge(
+        session.consultationType === "ONLINE" ? "Online" : "Physical",
+        "blue"
+      ),
+      statusBadge
+    );
+    if (previousStatus && previousStatus !== currentStatus) {
+      animateStateChange(statusBadge);
+    }
 
     const meta = el("div", "flex flex-wrap items-center gap-3");
     meta.append(
@@ -2026,6 +2623,7 @@
   function showBookingSuccess(appointment, session) {
     const form = document.querySelector("[data-booking-form]");
     const success = document.querySelector("[data-booking-success]");
+    const wasHidden = success ? success.hidden : true;
     const reference = document.querySelector("[data-booking-reference]");
     const number = document.querySelector("[data-booking-number]");
     const estimate = document.querySelector("[data-booking-estimate]");
@@ -2058,6 +2656,7 @@
 
     const goButton = document.querySelector("[data-booking-goto]");
     if (goButton) goButton.dataset.bookingGoto = "1";
+    if (wasHidden) animateEntry(success, 0, 360);
   }
 
   async function payBooking(appointmentId) {
@@ -2249,10 +2848,28 @@
     const tbody = document.querySelector("[data-appointments-list]");
     if (!tbody) return;
 
+    const previousStates = new Map(
+      Array.from(tbody.querySelectorAll("tr[data-motion-appointment]")).map(
+        (row) => [
+          row.dataset.motionAppointment,
+          {
+            status: row.dataset.motionStatus,
+            acceptance: row.dataset.motionAcceptance,
+            payment: row.dataset.motionPayment,
+          },
+        ]
+      )
+    );
     tbody.replaceChildren();
 
     list.forEach((appointment) => {
       const row = document.createElement("tr");
+      const appointmentId = String(appointment.appointmentId || "");
+      const previousState = previousStates.get(appointmentId);
+      row.dataset.motionAppointment = appointmentId;
+      row.dataset.motionStatus = appointment.status || "";
+      row.dataset.motionAcceptance = appointment.acceptanceStatus || "";
+      row.dataset.motionPayment = appointment.paymentStatus || "";
 
       const cells = [
         [referenceOf(appointment.bookingReference), "Booking ref"],
@@ -2291,6 +2908,13 @@
       }
       statusCell.append(statusWrap);
       row.append(statusCell);
+      if (
+        previousState &&
+        (previousState.status !== row.dataset.motionStatus ||
+          previousState.acceptance !== row.dataset.motionAcceptance)
+      ) {
+        animateStateChange(statusWrap);
+      }
 
       const paymentCell = document.createElement("td");
       paymentCell.dataset.label = "Payment";
@@ -2305,6 +2929,12 @@
           : appointment.paymentStatus === "REFUNDED"
             ? "Refunded"
             : "Not paid yet";
+      if (
+        previousState &&
+        previousState.payment !== row.dataset.motionPayment
+      ) {
+        animateStateChange(paymentCell);
+      }
       row.append(paymentCell);
 
       const actions = document.createElement("td");
@@ -2442,10 +3072,13 @@
     const number = current.appointmentNumber;
 
     document.querySelectorAll("[data-patient-queue-card]").forEach((card) => {
-      card.querySelector("[data-queue-headline]").textContent =
-        "You are number " + number;
+      const wasHidden = card.hidden;
+      setMotionText(
+        card.querySelector("[data-queue-headline]"),
+        "You are number " + number
+      );
 
-      card.querySelector("[data-queue-number]").textContent = String(number);
+      setMotionText(card.querySelector("[data-queue-number]"), String(number));
 
       const parts = [
         doctorName(current),
@@ -2467,10 +3100,16 @@
         parts.push("Your consultation is in progress");
       }
 
-      card.querySelector("[data-queue-details]").textContent =
-        parts.join(" · ");
+      const details = card.querySelector("[data-queue-details]");
+      const nextDetails = parts.join(" · ");
+      if (details && details.textContent !== nextDetails) {
+        const changed = Boolean(details.textContent);
+        details.textContent = nextDetails;
+        if (changed) animateStateChange(details);
+      }
 
       card.hidden = false;
+      if (wasHidden) animateEntry(card, 0, 320);
     });
 
     subscribeQueue(current.sessionId);
@@ -2499,7 +3138,7 @@
             const current = activeAppointment(state.appointments);
             const number = current ? current.appointmentNumber : null;
             const base = details.textContent.split(" · Now serving")[0];
-            details.textContent =
+            const nextDetails =
               base +
               " · Now serving #" +
               payload.nowServing +
@@ -2512,6 +3151,10 @@
                         ? " person ahead"
                         : " people ahead"))
                 : "");
+            if (details.textContent !== nextDetails) {
+              details.textContent = nextDetails;
+              animateStateChange(details);
+            }
           }
         });
       }
@@ -3088,10 +3731,16 @@
 
     if (statusBadge) {
       const entry = SESSION_STATUS[queue.status] || [titleCase(queue.status), "slate"];
+      const previousStatus = statusBadge.dataset.motionStatus;
       statusBadge.className =
         "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap " +
         (TONE[entry[1]] || TONE.slate);
+      statusBadge.classList.add("mc-motion-status");
       statusBadge.textContent = entry[0];
+      statusBadge.dataset.motionStatus = queue.status || "";
+      if (previousStatus && previousStatus !== queue.status) {
+        animateStateChange(statusBadge);
+      }
     }
   }
 
@@ -3100,7 +3749,7 @@
 
     const set = (selector, value) => {
       const node = document.querySelector(selector);
-      if (node) node.textContent = value;
+      setMotionText(node, value);
     };
 
     set("[data-stat-booked]", appointments.length);
@@ -4745,18 +5394,18 @@
       const users = (usersResp.status === "fulfilled" && Array.isArray(usersResp.value)) ? usersResp.value : [];
 
       if (stats) {
-        if (doctorsEl && stats.totalDoctors != null) doctorsEl.textContent = stats.totalDoctors;
-        if (activeEl && stats.totalUsers != null) activeEl.textContent = stats.totalUsers;
-        if (appointmentsEl && stats.totalAppointments != null) appointmentsEl.textContent = stats.totalAppointments;
+        if (doctorsEl && stats.totalDoctors != null) setMotionText(doctorsEl, stats.totalDoctors);
+        if (activeEl && stats.totalUsers != null) setMotionText(activeEl, stats.totalUsers);
+        if (appointmentsEl && stats.totalAppointments != null) setMotionText(appointmentsEl, stats.totalAppointments);
       } else if (users.length) {
         const docCount = users.filter((u) => u.role === "DOCTOR").length;
-        if (doctorsEl) doctorsEl.textContent = docCount;
-        if (activeEl) activeEl.textContent = users.length;
+        if (doctorsEl) setMotionText(doctorsEl, docCount);
+        if (activeEl) setMotionText(activeEl, users.length);
       }
 
       if (managersEl) {
         const mgrCount = users.filter((u) => u.role === "MANAGER").length;
-        managersEl.textContent = mgrCount || 3;
+        setMotionText(managersEl, mgrCount || 3);
       }
     } catch (err) {
       console.warn("Could not load admin stats:", err);
@@ -5327,6 +5976,46 @@
       // Calculate Manager Dashboard Stats
       const today = todayISO();
       const todaySessions = sessions.filter((s) => s.sessionDate === today);
+      const doctorsToday = new Set(todaySessions.map((s) => s.doctorId)).size;
+      const doctorsActiveNow = new Set(
+        sessions.filter((s) => s.status === "IN_PROGRESS").map((s) => s.doctorId)
+      ).size;
+
+      const activeNowServing = sessions
+        .filter((s) => s.status === "IN_PROGRESS" && s.queue && s.queue.nowServing != null)
+        .map((s) => "#" + s.queue.nowServing);
+
+      const liveQueueText = activeNowServing.length > 0
+        ? "Now serving " + activeNowServing.join(", ")
+        : (sessions.some((s) => s.status === "IN_PROGRESS") ? "In consultation" : (todaySessions.length > 0 ? "Starts at #1" : "—"));
+
+      const totalBookedToday = todaySessions.reduce(
+        (acc, s) => acc + Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)),
+        0
+      );
+      const physCount = todaySessions.filter((s) => s.consultationType === "PHYSICAL").length;
+      const onlineCount = todaySessions.filter((s) => s.consultationType === "ONLINE").length;
+      const totalRevenueToday = todaySessions.reduce(
+        (acc, s) => acc + (Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)) * (s.feeLkr || 0)),
+        0
+      );
+
+      // Populate dashboard stats elements
+      const elSessionsToday = document.querySelector("[data-manager-sessions-today]");
+      const elDocsToday = document.querySelector("[data-manager-doctors-today]");
+      const elDocsNow = document.querySelector("[data-manager-doctors-now]");
+      const elQueueServing = document.querySelector("[data-manager-live-queue-serving]");
+      const elApptsToday = document.querySelector("[data-manager-appointments-today]");
+      const elTypeSplit = document.querySelector("[data-manager-type-split]");
+      const elRevenue = document.querySelector("[data-manager-revenue-today]");
+
+      setMotionText(elSessionsToday, todaySessions.length || "0");
+      setMotionText(elDocsToday, doctorsToday || "0");
+      setMotionText(elDocsNow, doctorsActiveNow || "0");
+      setMotionText(elQueueServing, liveQueueText);
+      setMotionText(elApptsToday, totalBookedToday > 0 ? totalBookedToday : "0");
+      setMotionText(elTypeSplit, todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "0 / 0");
+      setMotionText(elRevenue, totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 0");
 
       function renderRow(s) {
         const tr = document.createElement("tr");
@@ -7771,17 +8460,20 @@
   });
 
   // ---------------------------------------------------------------
-  // Localisation (English / Sinhala)
+  // Localisation (English / Sinhala / Tamil)
   // ---------------------------------------------------------------
 
+  const LANGS = ["en", "si", "ta"];
   let lang = "en";
   try {
-    lang = localStorage.getItem("mc-lang") || "en";
+    const stored = localStorage.getItem("mc-lang") || "en";
+    lang = LANGS.includes(stored) ? stored : "en";
   } catch {
     // Storage can be unavailable in private modes.
   }
 
   const D = {
+  si: {
   "Choose a doctor and a time. Get your number instantly.": "වෛද්‍යවරයෙකු සහ වේලාවක් තෝරන්න. ඔබේ අංකය වහාම ලබාගන්න.",
   "See who is being called now. We’ll alert you when your turn is near.": "දැන් අමතන්නේ කාවදැයි බලන්න. ඔබේ වාරය ළඟා වූ විට අපි දැනුම් දෙන්නෙමු.",
   "Your health details are encrypted. Only you and your doctor can read them.": "ඔබේ සෞඛ්‍ය තොරතුරු සංකේතනය කර ඇත. කියවිය හැක්කේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.",
@@ -8012,9 +8704,245 @@
   "Booking closes 16:00 (1 h before)": "වෙන්කිරීම් වසන වේලාව 16:00 (පැය 1කට පෙර)",
   "Booking closes 18:00 (30 min before)": "වෙන්කිරීම් වසන වේලාව 18:00 (මිනිත්තු 30කට පෙර)",
   "Video-free chat room": "වීඩියෝ රහිත චැට් කාමරය"
-};
+  },
+  ta: {
+  "Choose a doctor and a time. Get your number instantly.": "ஒரு மருத்துவரையும் நேரத்தையும் தேர்வுசெய்யுங்கள். உங்கள் எண்ணை உடனே பெறுங்கள்.",
+  "See who is being called now. We’ll alert you when your turn is near.": "இப்போது யார் அழைக்கப்படுகிறார்கள் என்பதைப் பாருங்கள். உங்கள் முறை நெருங்கும்போது நாங்கள் தெரிவிப்போம்.",
+  "Your health details are encrypted. Only you and your doctor can read them.": "உங்கள் சுகாதாரத் தகவல்கள் மறைகுறியாக்கப்பட்டுள்ளன. உங்களாலும் உங்கள் மருத்துவராலும் மட்டுமே படிக்க முடியும்.",
+  "Welcome to Lanka Care Hospital, Colombo": "லங்கா கேர் வைத்தியசாலை, கொழும்பு — நல்வரவு",
+  "We’re glad you’re here. Book a visit, follow your number live, or chat with your doctor online, so you spend less time waiting and more time feeling better.": "நீங்கள் வந்திருப்பதில் மகிழ்ச்சி. சந்திப்பை முன்பதிவு செய்யுங்கள், உங்கள் எண்ணை நேரடியாகக் கண்காணியுங்கள், அல்லது மருத்துவருடன் நிகழ்நிலையில் உரையாடுங்கள்; காத்திருப்பைக் குறைத்து, நலமாக உணருங்கள்.",
+  "Create a free account": "இலவசக் கணக்கை உருவாக்குங்கள்",
+  "— it only takes a minute.": "— ஒரு நிமிடம் மட்டுமே ஆகும்.",
+  "Your doctor,": "உங்கள் மருத்துவர்,",
+  "one tap away": "ஒரே தொடுதலில்",
+  "Free to join": "இலவசமாக இணையுங்கள்",
+  "Encrypted data": "மறைகுறியாக்கப்பட்ட தரவு",
+  "No phone queues": "தொலைபேசி வரிசை இல்லை",
+  "How it works": "இது எவ்வாறு செயல்படுகிறது",
+  "Three simple steps to see your doctor.": "மருத்துவரைச் சந்திக்க மூன்று எளிய படிகள்.",
+  "✓ Booked · #14": "✓ முன்பதிவு · #14",
+  "Booked · #14": "முன்பதிவு · #14",
+  "Visiting doctors": "வருகை தரும் மருத்துவர்கள்",
+  "Specialisations": "சிறப்புத்துறைகள்",
+  "Sessions every week": "வாரத்திற்கான அமர்வுகள்",
+  "You’re booked in!": "முன்பதிவு வெற்றிகரமாக முடிந்தது!",
+  "Doctor is seeing patients now": "மருத்துவர் இப்போது நோயாளிகளைப் பார்க்கிறார்",
+  "Now calling": "தற்போது அழைக்கப்படும் இலக்கம்",
+  "4 people ahead of you": "உங்களுக்கு முன்னால் 4 பேர்",
+  "Your estimated time": "உங்கள் மதிப்பிடப்பட்ட நேரம்",
+  "Your turn is expected around 19:10. We’ll let you know when you’re 3 numbers away, and again when the doctor calls you.": "உங்கள் முறை 19:10 மணியளவில் எதிர்பார்க்கப்படுகிறது. 3 எண்கள் முன்னதாகவும், மருத்துவர் அழைக்கும்போதும் நாங்கள் தெரிவிப்போம்.",
+  "Your visits, past and upcoming": "உங்கள் கடந்த மற்றும் வரவிருக்கும் சந்திப்புகள்",
+  "Booking ref": "முன்பதிவு எண்",
+  "When": "எப்போது",
+  "Visit type": "சந்திப்பு வகை",
+  "Not paid yet": "இன்னும் பணம் செலுத்தப்படவில்லை",
+  "Too late to cancel": "ரத்துசெய்ய நேரம் கடந்துவிட்டது",
+  "Cancelled, kept in your history": "ரத்துசெய்யப்பட்டது; உங்கள் வரலாற்றில் உள்ளது",
+  "View summary & leave feedback": "சுருக்கத்தைப் பார்த்து கருத்து தெரிவியுங்கள்",
+  "Cancel booking": "முன்பதிவை ரத்துசெய்யுங்கள்",
+  "You can cancel an unpaid appointment up to 3 hours before it starts. Cancelled appointments stay in your history.": "பணம் செலுத்தாத முன்பதிவை ஆரம்பிக்கும் 3 மணிநேரத்திற்கு முன் வரை ரத்துசெய்யலாம். ரத்துசெய்யப்பட்ட முன்பதிவுகள் உங்கள் வரலாற்றில் இருக்கும்.",
+  "Reference": "குறிப்பு எண்",
+  "Your reference is MC-20261109-0142. Your number is #14, and the doctor should see you around 19:10.": "உங்கள் குறிப்பு எண் MC-20261109-0142. உங்கள் எண் #14, மருத்துவர் 19:10 மணியளவில் உங்களைப் பார்ப்பார்.",
+  "Welcome": "நல்வரவு",
+  "Lanka Care Hospital, Colombo": "லங்கா கேர் வைத்தியசாலை, கொழும்பு",
+  "Your doctor, one tap away": "மருத்துவர் இப்போது ஒரே தட்டலில்",
+  "Book a visit, follow your number live, or chat with your doctor online. No more waiting on the phone or in long queues.": "சந்திப்பை முன்பதிவு செய்யுங்கள், உங்கள் எண்ணை நேரடியாகக் கண்காணியுங்கள், அல்லது மருத்துவருடன் நிகழ்நிலையில் உரையாடுங்கள். தொலைபேசியில் அல்லது நீண்ட வரிசையில் காத்திருக்க வேண்டாம்.",
+  "New here?": "புதியவரா?",
+  "Book in minutes": "சில நிமிடங்களில் முன்பதிவு செய்யுங்கள்",
+  "Pick a doctor, choose a time and get your number straight away.": "மருத்துவரைத் தேர்வுசெய்து, நேரத்தைத் தேர்வுசெய்து, உடனே உங்கள் எண்ணைப் பெறுங்கள்.",
+  "Follow your queue": "வரிசை நிலவரத்தை அறியுங்கள்",
+  "See who is being served now and get a nudge when your turn is near.": "இப்போது யாருக்கு சேவை செய்யப்படுகிறது என்பதைப் பாருங்கள்; உங்கள் முறை நெருங்கும்போது அறிவிப்புப் பெறுங்கள்.",
+  "Safe and private": "பாதுகாப்பானது மற்றும் தனிப்பட்டது",
+  "Your health details are encrypted and only you and your doctor can read them.": "உங்கள் சுகாதாரத் தகவல்கள் மறைகுறியாக்கப்பட்டுள்ளன; உங்களாலும் உங்கள் மருத்துவராலும் மட்டுமே படிக்க முடியும்.",
+  "Find doctors": "மருத்துவர்களைத் தேடுங்கள்",
+  "My appointments": "எனது முன்பதிவுகள்",
+  "Consultation": "மருத்துவ ஆலோசனை",
+  "Doctor": "மருத்துவர்",
+  "Manager": "மேலாளர்",
+  "Admin": "நிர்வாகி",
+  "Log in": "உள்நுழையுங்கள்",
+  "Register": "பதிவுசெய்யுங்கள்",
+  "Log out": "வெளியேறுங்கள்",
+  "Customer": "நோயாளி",
+  "Find a doctor": "மருத்துவரைத் தேடுங்கள்",
+  "Lanka Care Hospital, Colombo · all times Asia/Colombo": "லங்கா கேர் வைத்தியசாலை, கொழும்பு · அனைத்து நேரங்களும் ஆசியா/கொழும்பு",
+  "Doctor name": "மருத்துவர் பெயர்",
+  "Specialisation": "சிறப்புத்துறை",
+  "Date": "திகதி",
+  "Session type": "அமர்வு வகை",
+  "All": "அனைத்தும்",
+  "Cardiology": "இதயவியல்",
+  "Neurology": "நரம்பியல்",
+  "Paediatrics": "சிறுவர் மருத்துவம்",
+  "Physical": "நேரடி",
+  "Online": "நிகழ்நிலை",
+  "Search sessions": "அமர்வுகளைத் தேடுங்கள்",
+  "Availability updates when anyone books or cancels": "யாரேனும் முன்பதிவு செய்தாலோ ரத்துசெய்தாலோ இடங்கள் நேரடியாகப் புதுப்பிக்கப்படும்",
+  "Spots left (live)": "மீதமுள்ள இடங்கள் (நேரடி)",
+  "Book": "முன்பதிவு",
+  "Session full": "அமர்வு நிரம்பிவிட்டது",
+  "No spots left": "இடங்கள் இல்லை",
+  "What would you like to see the doctor about?": "மருத்துவரிடம் எதைப் பற்றி ஆலோசிக்க விரும்புகிறீர்கள்?",
+  "Please tell us a little about why you’re visiting.": "நீங்கள் ஏன் வருகிறீர்கள் என்பதைச் சுருக்கமாகக் கூறுங்கள்.",
+  "You’ll get your queue number as soon as you book, and it’s yours alone. Your estimated time depends on your number and any delays.": "முன்பதிவு செய்தவுடன் உங்கள் வரிசை எண் கிடைக்கும்; அது உங்களுக்கு மட்டுமே. மதிப்பிடப்பட்ட நேரம் உங்கள் எண் மற்றும் தாமதங்களைப் பொறுத்தது.",
+  "Confirm my booking": "எனது முன்பதிவை உறுதிசெய்யுங்கள்",
+  "To finish booking, please log in or create a free account.": "முன்பதிவை முடிக்க, தயவுசெய்து உள்நுழையுங்கள் அல்லது இலவசக் கணக்கை உருவாக்குங்கள்.",
+  "Upcoming and past": "வரவிருக்கும் மற்றும் கடந்த",
+  "Session": "அமர்வு",
+  "Type": "வகை",
+  "Status": "நிலை",
+  "Payment": "கட்டணம்",
+  "Booked": "முன்பதிவு செய்யப்பட்டது",
+  "Pending": "நிலுவையில்",
+  "Completed": "முடிந்தது",
+  "Cancelled": "ரத்து",
+  "Cancel": "ரத்துசெய்",
+  "Now serving": "இப்போது அழைக்கப்படும் எண்",
+  "Your number": "உங்கள் இலக்கம்",
+  "Est. time": "மதிப்பிடப்பட்ட நேரம்",
+  "Session in progress": "அமர்வு நடைபெறுகிறது",
+  "Summary & feedback": "சுருக்கம் மற்றும் கருத்து",
+  "Kept on record": "பதிவில் வைக்கப்பட்டுள்ளது",
+  "Cancel closed (BR-07)": "ரத்துசெய்யும் காலம் முடிந்தது",
+  "Unpaid appointments can be cancelled until 3 hours before the session. Cancelled appointments stay in your history.": "பணம் செலுத்தாத முன்பதிவுகளை அமர்வுக்கு 3 மணிநேரத்திற்கு முன் வரை ரத்துசெய்யலாம். ரத்துசெய்யப்பட்ட முன்பதிவுகள் உங்கள் வரலாற்றில் இருக்கும்.",
+  "Today’s sessions": "இன்றைய அமர்வுகள்",
+  "Patient list": "நோயாளிகள் பட்டியல்",
+  "Notes": "குறிப்புகள்",
+  "Patients in this session": "இந்த அமர்வில் உள்ள நோயாளிகள்",
+  "No.": "எண்.",
+  "Patient": "நோயாளி",
+  "Check-in": "வருகைப் பதிவு",
+  "Start session": "அமர்வைத் தொடங்குங்கள்",
+  "End session": "அமர்வை முடியுங்கள்",
+  "Complete": "நிறைவுசெய்",
+  "No-show": "வரவில்லை",
+  "Waiting": "காத்திருக்கிறார்",
+  "In consultation": "ஆலோசனையில்",
+  "In progress": "நடைபெறுகிறது",
+  "Arrived": "வந்துவிட்டார்",
+  "Not arrived": "வரவில்லை",
+  "Next": "அடுத்து",
+  "Diagnosis summary": "நோயறிதல் சுருக்கம்",
+  "Advice and prescription": "ஆலோசனை மற்றும் மருந்துச்சீட்டு",
+  "Save notes": "குறிப்புகளைச் சேமியுங்கள்",
+  "Reason for visit": "வருகையின் காரணம்",
+  "Online consultation": "நிகழ்நிலை ஆலோசனை",
+  "Private chat": "தனிப்பட்ட உரையாடல்",
+  "Connected": "இணைக்கப்பட்டது",
+  "Message (max 1000 characters)": "செய்தி (அதிகபட்சம் 1000 எழுத்துகள்)",
+  "Send": "அனுப்புங்கள்",
+  "End consultation": "ஆலோசனையை முடியுங்கள்",
+  "Doctor’s summary": "மருத்துவரின் சுருக்கம்",
+  "Consultation summary": "ஆலோசனையின் சுருக்கம்",
+  "Print summary & prescription": "சுருக்கம் மற்றும் மருந்துச்சீட்டை அச்சிடுங்கள்",
+  "Feedback": "கருத்து",
+  "Rating (1–5)": "மதிப்பீடு (1–5)",
+  "Comment": "கருத்துரை",
+  "Submit feedback": "கருத்தை அனுப்புங்கள்",
+  "Manager dashboard": "மேலாளர் கட்டுப்பாட்டுப் பலகை",
+  "Dashboard": "கட்டுப்பாட்டுப் பலகை",
+  "Sessions": "அமர்வுகள்",
+  "Reception": "வரவேற்பு",
+  "Notices and feedback": "அறிவிப்புகள் மற்றும் கருத்துகள்",
+  "Book for walk-in patient": "நேரடியாக வரும் நோயாளிக்கு முன்பதிவு",
+  "Sessions today": "இன்றைய அமர்வுகள் எண்ணிக்கை",
+  "Appointments": "முன்பதிவுகள்",
+  "Physical / online": "நேரடி / நிகழ்நிலை",
+  "No-show rate": "வராத விகிதம்",
+  "Revenue": "வருவாய்",
+  "Time": "நேரம்",
+  "Room": "அறை",
+  "Delay": "தாமதம்",
+  "Edit": "திருத்து",
+  "Open": "திறந்தது",
+  "Search today’s appointments": "இன்றைய முன்பதிவுகளைத் தேடுங்கள்",
+  "Mark arrived": "வந்ததாகக் குறியுங்கள்",
+  "Record payment": "கட்டணத்தைப் பதிவுசெய்யுங்கள்",
+  "Publish notice": "அறிவிப்பை வெளியிடுங்கள்",
+  "Approve": "அங்கீகரியுங்கள்",
+  "Hide": "மறைக்க",
+  "Show": "காட்டுங்கள்",
+  "System administration": "அமைப்பு நிர்வாகம்",
+  "System dashboard": "அமைப்பு கட்டுப்பாட்டுப் பலகை",
+  "Active accounts": "செயலில் உள்ள கணக்குகள்",
+  "Doctors": "மருத்துவர்கள்",
+  "Managers": "மேலாளர்கள்",
+  "Failed logins today": "இன்றைய தோல்வியுற்ற உள்நுழைவுகள்",
+  "Staff accounts": "ஊழியர் கணக்குகள்",
+  "Name": "பெயர்",
+  "Email": "மின்னஞ்சல்",
+  "Role": "பதவி",
+  "Active": "செயலில்",
+  "Inactive": "செயலற்றது",
+  "Deactivate": "செயலிழக்கச்செய்",
+  "Activate": "செயல்படுத்து",
+  "Reset password": "கடவுச்சொல்லை மீட்டமையுங்கள்",
+  "Create staff account": "ஊழியர் கணக்கை உருவாக்குங்கள்",
+  "Full name": "முழுப் பெயர்",
+  "Create account": "கணக்கை உருவாக்குங்கள்",
+  "A temporary password is issued and must be changed at first login.": "தற்காலிக கடவுச்சொல் வழங்கப்படும்; முதல் உள்நுழைவின்போது மாற்ற வேண்டும்.",
+  "Audit log": "தணிக்கைப் பதிவு",
+  "Action": "செயல்",
+  "User": "பயனர்",
+  "IP": "IP",
+  "Welcome back": "மீண்டும் நல்வரவு",
+  "Log in to book and manage your appointments.": "முன்பதிவு செய்து நிர்வகிக்க உள்நுழையுங்கள்.",
+  "Password": "கடவுச்சொல்",
+  "New patient?": "புதிய நோயாளியா?",
+  "Create an account": "கணக்கை உருவாக்குங்கள்",
+  "Doctor and manager accounts are created by the hospital IT administrator.": "மருத்துவர் மற்றும் மேலாளர் கணக்குகளை வைத்தியசாலை IT நிர்வாகி உருவாக்குவார்.",
+  "That email or password doesn’t look right. Please try again.": "மின்னஞ்சல் அல்லது கடவுச்சொல் சரியாகத் தெரியவில்லை. தயவுசெய்து மீண்டும் முயற்சியுங்கள்.",
+  "Too many wrong attempts. For your safety, please try again in 15 minutes.": "தவறான முயற்சிகள் அதிகம். உங்கள் பாதுகாப்பிற்காக 15 நிமிடங்கள் கழித்து மீண்டும் முயற்சியுங்கள்.",
+  "Create your account": "உங்கள் கணக்கை உருவாக்குங்கள்",
+  "Create a free patient account to start booking.": "முன்பதிவைத் தொடங்க இலவச நோயாளி கணக்கை உருவாக்குங்கள்.",
+  "NIC": "தேசிய அடையாள அட்டை எண்",
+  "Date of birth": "பிறந்த திகதி",
+  "Gender": "பாலினம்",
+  "Choose": "தேர்வுசெய்யுங்கள்",
+  "Female": "பெண்",
+  "Male": "ஆண்",
+  "Other": "பிற",
+  "Phone": "தொலைபேசி",
+  "Address": "முகவரி",
+  "Confirm password": "கடவுச்சொல்லை உறுதிசெய்யுங்கள்",
+  "Already registered?": "ஏற்கனவே பதிவுசெய்துள்ளீர்களா?",
+  "You’re all set! Your account is ready. Please log in.": "அனைத்தும் தயார்! உங்கள் கணக்கு உருவாக்கப்பட்டது. தயவுசெய்து உள்நுழையுங்கள்.",
+  "There’s already an account with this email or NIC. Try logging in instead.": "இந்த மின்னஞ்சல் அல்லது அடையாள அட்டை எண்ணில் ஏற்கனவே கணக்கு உள்ளது. அதற்குப் பதிலாக உள்நுழைய முயற்சியுங்கள்.",
+  "We couldn’t create your account just now. Please check your details and try again.": "உங்கள் கணக்கை இப்போது உருவாக்க முடியவில்லை. விவரங்களைச் சரிபார்த்து மீண்டும் முயற்சியுங்கள்.",
+  "Please enter your full name.": "தயவுசெய்து உங்கள் முழுப் பெயரை உள்ளிடுங்கள்.",
+  "That NIC doesn’t look right. Use 9 digits + V/X, or 12 digits.": "அடையாள அட்டை எண் சரியாகத் தெரியவில்லை. 9 இலக்கங்கள் + V/X, அல்லது 12 இலக்கங்கள் பயன்படுத்துங்கள்.",
+  "Please choose your date of birth.": "தயவுசெய்து உங்கள் பிறந்த திகதியைத் தேர்வுசெய்யுங்கள்.",
+  "Please enter your phone number like 07XXXXXXXX.": "தயவுசெய்து தொலைபேசி எண்ணை 07XXXXXXXX வடிவத்தில் உள்ளிடுங்கள்.",
+  "Please enter a valid email address.": "தயவுசெய்து சரியான மின்னஞ்சல் முகவரியை உள்ளிடுங்கள்.",
+  "Please enter your address.": "தயவுசெய்து உங்கள் முகவரியை உள்ளிடுங்கள்.",
+  "Use at least 8 characters, with a letter, a number and a symbol.": "குறைந்தது 8 எழுத்துகள், ஒரு எழுத்து, ஒரு எண், ஒரு குறியீடு பயன்படுத்துங்கள்.",
+  "The passwords don’t match yet.": "கடவுச்சொற்கள் இன்னும் பொருந்தவில்லை.",
+  "Please fill this in.": "தயவுசெய்து இதை நிரப்புங்கள்.",
+  "Skip the phone queue.": "தொலைபேசி வரிசையைத் தவிர்க்கவும்.",
+  "Book a doctor, follow your number live and consult online, all in one place at Lanka Care Hospital.": "லங்கா கேர் வைத்தியசாலையில் மருத்துவரை முன்பதிவு செய்யுங்கள், உங்கள் எண்ணை நேரடியாகக் கண்காணியுங்கள், நிகழ்நிலையில் ஆலோசியுங்கள் — எல்லாம் ஒரே இடத்தில்.",
+  "Passwords are hashed with bcrypt, never stored in plain text.": "கடவுச்சொற்கள் bcrypt மூலம் பாதுகாக்கப்படுகின்றன; எளிய எழுத்தில் சேமிக்கப்படுவதில்லை.",
+  "Personal and medical data is encrypted with AES-256-GCM.": "தனிப்பட்ட மற்றும் மருத்துவத் தரவு AES-256-GCM மூலம் மறைகுறியாக்கப்படுகிறது.",
+  "Sessions use signed tokens in HTTP-only, Secure cookies.": "உள்நுழைவு அமர்வுகள் HTTP-only, Secure குக்கீகளில் கையொப்பமிடப்பட்ட டோக்கன்களைப் பயன்படுத்துகின்றன.",
+  "Emergency? Call 1990": "அவசரமா? 1990 ஐ அழையுங்கள்",
+  "Patients": "நோயாளிகள்",
+  "Hospital staff": "வைத்தியசாலை ஊழியர்கள்",
+  "Doctor console": "மருத்துவர் தளம்",
+  "Administration": "நிர்வாகம்",
+  "Book a doctor, follow your queue live and consult online, all in one place at Lanka Care Hospital, Colombo.": "லங்கா கேர் வைத்தியசாலையில் (கொழும்பு) மருத்துவரை முன்பதிவு செய்யுங்கள், உங்கள் வரிசையை நேரடியாகக் கண்காணியுங்கள், நிகழ்நிலையில் ஆலோசியுங்கள் — எல்லாம் ஒரே இடத்தில்.",
+  "Medical data is encrypted and visible only to you and your doctor.": "மருத்துவத் தரவு மறைகுறியாக்கப்பட்டுள்ளது; உங்களாலும் உங்கள் மருத்துவராலும் மட்டுமே பார்க்க முடியும்.",
+  "Book: Dr. Nadeesha Wijesinghe": "முன்பதிவு: Dr. Nadeesha Wijesinghe",
+  "Reference or name": "குறிப்பு எண் அல்லது பெயர்",
+  "e.g. Wijesinghe": "எ.கா. Wijesinghe",
+  "Booking closes 16:00 (1 h before)": "முன்பதிவு 16:00 இல் முடிவடையும் (1 மணிநேரம் முன்)",
+  "Booking closes 18:00 (30 min before)": "முன்பதிவு 18:00 இல் முடிவடையும் (30 நிமிடங்கள் முன்)",
+  "Video-free chat room": "வீடியோ இல்லா உரையாடல் அறை"
+  }
+  };
 
-  const L = (value) => (lang === "si" && D[value]) || value;
+  const L = (value) => {
+    if (lang !== "en" && D[lang] && D[lang][value]) return D[lang][value];
+    return value;
+  };
 
   function tx(node) {
     const text = node.data.trim();
@@ -8024,13 +8952,13 @@
 
     if (
       english === undefined ||
-      (text !== english.trim() && text !== node.__si)
+      (text !== english.trim() && text !== node.__tr)
     ) {
       english = node.__en = node.data;
     }
 
-    const translated = lang === "si" && D[english.trim()];
-    node.__si = translated || undefined;
+    const translated = lang !== "en" && D[lang] && D[lang][english.trim()];
+    node.__tr = translated || undefined;
 
     const next = translated
       ? english.replace(english.trim(), translated)
@@ -8048,13 +8976,13 @@
 
       if (
         element[key] === undefined ||
-        (current !== element[key] && current !== element[key + "s"])
+        (current !== element[key] && current !== element[key + "t"])
       ) {
         element[key] = current;
       }
 
-      const translated = lang === "si" && D[element[key]];
-      element[key + "s"] = translated || undefined;
+      const translated = lang !== "en" && D[lang] && D[lang][element[key]];
+      element[key + "t"] = translated || undefined;
 
       const next = translated || element[key];
 
@@ -8063,6 +8991,10 @@
   }
 
   function applyLocalisation(root) {
+    if (root && root.nodeType === 1) {
+      attributeTranslate(root);
+    }
+
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_TEXT,
@@ -8084,12 +9016,272 @@
       .forEach(attributeTranslate);
   }
 
-  languageButton = document.createElement("button");
-  languageButton.id = "lang-btn";
-  languageButton.type = "button";
-  languageButton.className =
-    "fixed bottom-4 right-4 z-50 px-4 py-2 rounded-full bg-white border border-line shadow-lg text-sm font-semibold text-brand cursor-pointer hover:bg-snow";
-  document.body.appendChild(languageButton);
+  const langContainer = document.createElement("div");
+  langContainer.id = "lang-btn";
+  langContainer.className =
+    "fixed bottom-3 right-3 z-50 flex max-w-[calc(100vw-1.5rem)] items-center gap-1 rounded-full border border-brand/20 bg-white/95 p-1.5 shadow-lg backdrop-blur-md sm:bottom-4 sm:right-4 sm:gap-1.5";
+  langContainer.setAttribute("role", "group");
+  langContainer.setAttribute("aria-label", "Choose language");
+
+  const langLabels = { en: "English", si: "සිංහල", ta: "தமிழ்" };
+  const globeIcon = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg"
+  );
+  globeIcon.setAttribute("viewBox", "0 0 24 24");
+  globeIcon.setAttribute("aria-hidden", "true");
+  globeIcon.setAttribute("focusable", "false");
+  globeIcon.setAttribute(
+    "class",
+    "h-4 w-4 shrink-0 text-brand"
+  );
+  globeIcon.setAttribute("fill", "none");
+  globeIcon.setAttribute("stroke", "currentColor");
+  globeIcon.setAttribute("stroke-width", "1.7");
+  globeIcon.setAttribute("stroke-linecap", "round");
+  globeIcon.setAttribute("stroke-linejoin", "round");
+
+  const globeOutline = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "circle"
+  );
+  globeOutline.setAttribute("cx", "12");
+  globeOutline.setAttribute("cy", "12");
+  globeOutline.setAttribute("r", "9");
+  globeIcon.appendChild(globeOutline);
+
+  const globeLatitude = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path"
+  );
+  globeLatitude.setAttribute("d", "M3 12h18");
+  globeIcon.appendChild(globeLatitude);
+
+  const globeLongitude = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path"
+  );
+  globeLongitude.setAttribute(
+    "d",
+    "M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"
+  );
+  globeIcon.appendChild(globeLongitude);
+  langContainer.appendChild(globeIcon);
+
+  const languageOptions = document.createElement("div");
+  languageOptions.id = "language-options";
+  languageOptions.className =
+    "hidden items-center overflow-hidden sm:flex";
+  languageOptions.setAttribute("role", "group");
+  languageOptions.setAttribute("aria-label", "Language");
+  languageOptions.style.gap = "0px";
+
+  const mobileLanguageToggle = document.createElement("button");
+  mobileLanguageToggle.type = "button";
+  mobileLanguageToggle.className =
+    "inline-flex min-h-9 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-ink transition-all duration-150 ease-out hover:bg-brand/10 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 active:scale-95 motion-reduce:transition-none sm:hidden";
+  mobileLanguageToggle.setAttribute("aria-expanded", "false");
+  mobileLanguageToggle.setAttribute("aria-controls", "language-options-mobile");
+  mobileLanguageToggle.setAttribute("aria-label", "Change language");
+
+  const mobileCurrentLanguage = document.createElement("span");
+  mobileLanguageToggle.appendChild(mobileCurrentLanguage);
+
+  const mobileLanguageMenu = document.createElement("div");
+  mobileLanguageMenu.id = "language-options-mobile";
+  mobileLanguageMenu.className =
+    "absolute bottom-full right-0 mb-2 hidden min-w-40 flex-col gap-1 rounded-2xl border border-brand/20 bg-white/95 p-2 shadow-lg backdrop-blur-md sm:hidden";
+  mobileLanguageMenu.setAttribute("role", "group");
+  mobileLanguageMenu.setAttribute("aria-label", "Language");
+
+  const languageOptionBase =
+    "inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 active:scale-95 motion-reduce:transition-none sm:text-sm";
+
+  const reducedMotionQuery = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  );
+  let desktopOptionsExpanded = false;
+  let desktopPointerInside = false;
+  let suppressDesktopExpansion = false;
+  let lastInputWasKeyboard = true;
+  let skipMobileFocusOpen = false;
+
+  function updateDesktopLanguageOptions() {
+    const expanded = desktopOptionsExpanded;
+    languageOptions.style.gap = expanded ? "0.375rem" : "0px";
+
+    const transition = reducedMotionQuery.matches
+      ? "none"
+      : "max-width 250ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out, transform 250ms cubic-bezier(0.22, 1, 0.36, 1), padding 250ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease-out, color 180ms ease-out";
+    languageOptions.style.transition = reducedMotionQuery.matches
+      ? "none"
+      : "gap 250ms cubic-bezier(0.22, 1, 0.36, 1)";
+
+    languageOptions.querySelectorAll("button[data-lang]").forEach((btn) => {
+      const isActive = btn.dataset.lang === lang;
+      const isVisible = expanded || isActive;
+      btn.style.maxWidth = isVisible ? "9rem" : "0px";
+      btn.style.minWidth = "0px";
+      btn.style.overflow = "hidden";
+      btn.style.paddingLeft = isVisible ? "0.75rem" : "0px";
+      btn.style.paddingRight = isVisible ? "0.75rem" : "0px";
+      btn.style.opacity = isVisible ? "1" : "0";
+      btn.style.transform = isVisible ? "translateX(0)" : "translateX(-0.4rem)";
+      btn.style.pointerEvents = isVisible ? "auto" : "none";
+      btn.style.transition = transition;
+      btn.tabIndex = isVisible ? 0 : -1;
+      if (isVisible) btn.removeAttribute("aria-hidden");
+      else btn.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  function setDesktopOptionsExpanded(expanded) {
+    desktopOptionsExpanded = expanded;
+    updateDesktopLanguageOptions();
+  }
+
+  function openMobileLanguageMenu() {
+    mobileLanguageMenu.classList.remove("hidden");
+    mobileLanguageToggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeMobileLanguageMenu(restoreFocus) {
+    mobileLanguageMenu.classList.add("hidden");
+    mobileLanguageToggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus && document.activeElement !== mobileLanguageToggle) {
+      skipMobileFocusOpen = true;
+      mobileLanguageToggle.focus();
+    }
+  }
+
+  function createLanguageOption(code, isMobile) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.lang = code;
+    btn.textContent = langLabels[code];
+    btn.className = `${languageOptionBase} ${
+      isMobile ? "w-full justify-start" : ""
+    }`;
+    btn.setAttribute("aria-pressed", code === lang ? "true" : "false");
+    btn.addEventListener("click", (event) => {
+      setLang(code);
+      if (isMobile) {
+        closeMobileLanguageMenu(true);
+      } else if (event.detail > 0) {
+        suppressDesktopExpansion = true;
+        btn.blur();
+        setDesktopOptionsExpanded(false);
+      }
+    });
+    return btn;
+  }
+
+  LANGS.forEach((code) => {
+    languageOptions.appendChild(createLanguageOption(code, false));
+    mobileLanguageMenu.appendChild(createLanguageOption(code, true));
+  });
+
+  langContainer.appendChild(languageOptions);
+  langContainer.appendChild(mobileLanguageToggle);
+  langContainer.appendChild(mobileLanguageMenu);
+  document.body.appendChild(langContainer);
+  languageButton = langContainer;
+
+  mobileLanguageToggle.addEventListener("click", () => {
+    const isExpanded =
+      mobileLanguageToggle.getAttribute("aria-expanded") === "true";
+    if (lastInputWasKeyboard) {
+      if (!isExpanded) openMobileLanguageMenu();
+    } else if (isExpanded) {
+      closeMobileLanguageMenu(false);
+    } else {
+      openMobileLanguageMenu();
+    }
+  });
+
+  langContainer.addEventListener("pointerenter", (event) => {
+    if (
+      event.pointerType === "mouse" &&
+      window.matchMedia("(min-width: 640px)").matches
+    ) {
+      desktopPointerInside = true;
+      if (!suppressDesktopExpansion) setDesktopOptionsExpanded(true);
+    }
+  });
+
+  langContainer.addEventListener("pointerleave", () => {
+    desktopPointerInside = false;
+    suppressDesktopExpansion = false;
+    if (!langContainer.contains(document.activeElement)) {
+      setDesktopOptionsExpanded(false);
+    }
+  });
+
+  langContainer.addEventListener("focusin", (event) => {
+    if (window.matchMedia("(min-width: 640px)").matches) {
+      if (!suppressDesktopExpansion) setDesktopOptionsExpanded(true);
+    } else if (event.target === mobileLanguageToggle && lastInputWasKeyboard) {
+      if (skipMobileFocusOpen) {
+        skipMobileFocusOpen = false;
+      } else {
+        openMobileLanguageMenu();
+      }
+    }
+  });
+
+  langContainer.addEventListener("focusout", (event) => {
+    if (langContainer.contains(event.relatedTarget)) return;
+    if (!desktopPointerInside) setDesktopOptionsExpanded(false);
+    closeMobileLanguageMenu(false);
+  });
+
+  langContainer.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !mobileLanguageMenu.classList.contains("hidden")) {
+      event.preventDefault();
+      closeMobileLanguageMenu(true);
+    }
+  });
+
+  document.addEventListener(
+    "keydown",
+    () => {
+      lastInputWasKeyboard = true;
+    },
+    true
+  );
+
+  document.addEventListener("pointerdown", (event) => {
+    lastInputWasKeyboard = false;
+    if (!langContainer.contains(event.target)) closeMobileLanguageMenu(false);
+  });
+
+  if (reducedMotionQuery.addEventListener) {
+    reducedMotionQuery.addEventListener("change", updateDesktopLanguageOptions);
+  } else if (reducedMotionQuery.addListener) {
+    reducedMotionQuery.addListener(updateDesktopLanguageOptions);
+  }
+
+  function updateLangButtons() {
+    langContainer.querySelectorAll("button[data-lang]").forEach((btn) => {
+      const isActive = btn.dataset.lang === lang;
+      const isMobileOption =
+        btn.parentElement === mobileLanguageMenu;
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      btn.className = `${languageOptionBase} ${
+        isMobileOption ? "w-full justify-start" : ""
+      } ${
+        isActive
+          ? "bg-brand text-white shadow-sm"
+          : "text-slate2 hover:bg-brand/10 hover:text-brand"
+      }`;
+    });
+    mobileCurrentLanguage.textContent = langLabels[lang];
+    mobileLanguageToggle.setAttribute(
+      "aria-label",
+      `Change language. Current language: ${langLabels[lang]}`
+    );
+    updateDesktopLanguageOptions();
+  }
 
   function setLang(next) {
     lang = next;
@@ -8100,12 +9292,8 @@
       // Ignore.
     }
 
-    document.documentElement.lang = next === "si" ? "si" : "en";
-    languageButton.textContent = next === "si" ? "English" : "සිංහල";
-    languageButton.setAttribute(
-      "aria-label",
-      next === "si" ? "Switch to English" : "සිංහලට මාරු වන්න"
-    );
+    document.documentElement.lang = next;
+    updateLangButtons();
 
     applyLocalisation(document.body);
 
@@ -8119,14 +9307,15 @@
     }
   }
 
-  languageButton.addEventListener("click", () => {
-    setLang(lang === "si" ? "en" : "si");
-  });
-
   new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       if (mutation.type === "characterData") {
         tx(mutation.target);
+        return;
+      }
+
+      if (mutation.type === "attributes") {
+        attributeTranslate(mutation.target);
         return;
       }
 
@@ -8139,10 +9328,35 @@
     childList: true,
     subtree: true,
     characterData: true,
+    attributes: true,
+    attributeFilter: ["placeholder", "aria-label", "data-label"],
   });
 
   setLang(lang);
+  const welcomeImage = document.querySelector('[data-view="welcome"] main figure');
+  if (welcomeImage) welcomeImage.classList.add("mc-motion-hero-image");
 
+  // Signature CTA interactive hover and approach handler
+  const ctaPrimary = document.querySelector(".mc-cta-primary");
+  const ctaPulse = document.querySelector(".mc-cta-travel-pulse");
+  if (ctaPrimary && ctaPulse) {
+    ctaPrimary.addEventListener("pointerenter", () => {
+      if (prefersReducedMotion.matches) return;
+      ctaPulse.setAttribute("cx", "68");
+      ctaPulse.style.opacity = "0.95";
+    });
+    ctaPrimary.addEventListener("pointerleave", () => {
+      if (prefersReducedMotion.matches) return;
+      ctaPulse.setAttribute("cx", "12");
+      ctaPulse.style.opacity = "0";
+    });
+    ctaPrimary.addEventListener("click", () => {
+      if (prefersReducedMotion.matches) return;
+      ctaPulse.setAttribute("cx", "74");
+      ctaPulse.style.opacity = "1";
+    });
+  }
+  setupPublicScrollReveals();
   // ---------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------
