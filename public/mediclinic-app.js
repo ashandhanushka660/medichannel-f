@@ -2128,6 +2128,22 @@
       }
       field.value = text;
     });
+
+    const fullName = [profile.firstName, profile.lastName]
+      .filter(Boolean)
+      .map(String)
+      .join(" ")
+      .trim();
+    const initials = [profile.firstName, profile.lastName]
+      .map((part) => (part ? String(part).trim().charAt(0) : ""))
+      .join("")
+      .toUpperCase();
+    const avatar = document.querySelector("[data-profile-initials]");
+    if (avatar && initials) avatar.textContent = initials.slice(0, 2);
+    const nameNode = document.querySelector("[data-profile-name]");
+    if (nameNode) nameNode.textContent = fullName || "Your profile";
+    const emailNode = document.querySelector("[data-profile-email]");
+    if (emailNode) emailNode.textContent = S && S.email ? S.email : "";
   }
 
   async function loadPatientProfile() {
@@ -2355,21 +2371,36 @@
       // BR-07: patients may cancel only unpaid, still-booked appointments
       // that are more than 3 hours before the session. Paid appointments
       // are non-refundable and must be cancelled by a manager/administrator.
-      const cancellable =
-        appointment.status === "BOOKED" &&
-        appointment.paymentStatus === "PENDING" &&
-        canCancel(appointment);
-
-      if (cancellable) {
-        actions.append(
-          actionButton(
-            "Cancel",
-            "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
-            "cancel-appointment",
-            appointment.appointmentId
-          )
-        );
+      // Keep the action on every row, but disable it with a clear reason when
+      // the backend rule does not allow a patient-initiated cancellation.
+      let cancelReason = "";
+      if (appointment.status === "CANCELLED") {
+        cancelReason = "This appointment is already cancelled.";
+      } else if (appointment.status === "COMPLETED") {
+        cancelReason = "Completed appointments cannot be cancelled.";
+      } else if (appointment.paymentStatus !== "PENDING") {
+        cancelReason =
+          "Paid appointments cannot be cancelled here. Please contact reception to arrange a cancellation or refund.";
+      } else if (appointment.status !== "BOOKED") {
+        cancelReason = "Only booked appointments can be cancelled.";
+      } else if (!canCancel(appointment)) {
+        cancelReason =
+          "Cancellations must be made at least 3 hours before the session.";
       }
+
+      const cancelButton = actionButton(
+        "Cancel",
+        cancelReason
+          ? "bg-white border-line text-mute"
+          : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+        "cancel-appointment",
+        appointment.appointmentId
+      );
+      if (cancelReason) cancelButton.disabled = true;
+      const cancelWrap = el("span", "inline-flex", "");
+      cancelWrap.title = cancelReason || "Cancel this appointment";
+      cancelWrap.append(cancelButton);
+      actions.append(cancelWrap);
 
       row.append(actions);
       tbody.append(row);
