@@ -27,3 +27,8 @@ test("the proxy authenticates solely via readAuthToken without client Authorizat
   assert.doesNotMatch(ROUTE, /incomingAuth/);
   assert.doesNotMatch(ROUTE, /request\.headers\.get\("authorization"\)/i);
 });
+
+test("the proxy clears the auth cookie when the backend responds with 401", () => {
+  assert.match(ROUTE, /status === 401/);
+  assert.match(ROUTE, /clearAuthCookie\(response\)/);
+});

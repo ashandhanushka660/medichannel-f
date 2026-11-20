@@ -14,6 +14,10 @@ const ME_ROUTE = readFileSync(
   new URL("../src/app/api/auth/me/route.ts", import.meta.url),
   "utf8"
 );
+const LOGOUT_ROUTE = readFileSync(
+  new URL("../src/app/api/auth/logout/route.ts", import.meta.url),
+  "utf8"
+);
 const COOKIE_LIB = readFileSync(
   new URL("../src/lib/auth-cookie.ts", import.meta.url),
   "utf8"
@@ -42,4 +46,10 @@ test("auth-cookie library configures HttpOnly, SameSite, and Secure options", ()
   assert.match(COOKIE_LIB, /httpOnly:\s*true/);
   assert.match(COOKIE_LIB, /sameSite:\s*"lax"/);
   assert.match(COOKIE_LIB, /__Host-medichannel_token/);
+});
+
+test("/api/auth/logout invalidates session on backend and clears auth cookie", () => {
+  assert.match(LOGOUT_ROUTE, /const token = readAuthToken\(request\);/);
+  assert.match(LOGOUT_ROUTE, /\/api\/v1\/auth\/logout/);
+  assert.match(LOGOUT_ROUTE, /clearAuthCookie\(response\);/);
 });
