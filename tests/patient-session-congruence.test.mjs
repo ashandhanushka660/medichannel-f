@@ -6,6 +6,10 @@ const APP_SOURCE = readFileSync(
   new URL("../public/mediclinic-app.js", import.meta.url),
   "utf8"
 );
+const API_SOURCE = readFileSync(
+  new URL("../public/mediclinic-api.js", import.meta.url),
+  "utf8"
+);
 const HTML_SOURCE = readFileSync(
   new URL("../public/mediclinic-system.html", import.meta.url),
   "utf8"
@@ -116,8 +120,8 @@ const session = {
   specialisation: "Cardiology",
   roomNumber: "A-12",
   sessionDate: "2026-11-24",
-  startTime: "07:00:00",
-  endTime: "16:00:00",
+  startTime: "09:00:00",
+  endTime: "12:00:00",
   consultationType: "PHYSICAL",
   status: "OPEN",
   minutesPerPatient: 10,
@@ -186,6 +190,59 @@ test("the booking confirmation keeps showing the allocated queue number", () => 
   );
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261123q"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261123r"/
   );
+});
+
+test("the booking form offers eight hourly periods from 07:00 to 16:00", () => {
+  const select = HTML_SOURCE.match(/<select id="index-period"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(select, "the time period select was not found");
+
+  const options = [...select[1].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(
+    (match) => ({ value: match[1], label: match[2] })
+  );
+
+  assert.deepEqual(
+    options.map((option) => option.value),
+    ["", "07:00", "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00"]
+  );
+  assert.equal(options[0].label, "All periods");
+  assert.equal(options[1].label, "07:00 – 08:00");
+  assert.equal(options[8].label, "15:00 – 16:00");
+  assert.ok(!options.some((option) => option.value === "12:00"));
+  assert.match(HTML_SOURCE, /<label for="index-period">Time period<\/label>/);
+});
+
+test("the selected hour is sent to the session search and labelled", () => {
+  const values = {
+    "index-q": "Wijesinghe",
+    "index-sp": "cardiology-id",
+    "index-dt": "2026-11-24",
+    "index-period": "09:00",
+    "index-ty": "ONLINE",
+  };
+  const $ = (id) => ({ value: values[id] || "" });
+
+  const currentFilters = new Function(
+    "$",
+    `${functionSource("currentFilters")}\nreturn currentFilters;`
+  )($);
+
+  assert.deepEqual(currentFilters(), {
+    q: "Wijesinghe",
+    specialisationId: "cardiology-id",
+    date: "2026-11-24",
+    period: "09:00",
+    consultationType: "ONLINE",
+  });
+
+  const periodLabel = new Function(
+    `${functionSource("periodLabel")}\nreturn periodLabel;`
+  )();
+  assert.equal(periodLabel("09:00"), "09:00–10:00");
+  assert.equal(periodLabel(""), "");
+
+  assert.match(APP_SOURCE, /MC\.sessions\(filters\)/);
+  assert.match(API_SOURCE, /sessions\(filters\) \{\s*return request\("sessions" \+ query\(filters\)\);/);
+  assert.match(APP_SOURCE, /day \+\n\s*\(period \? " · " \+ period : ""\)/);
 });

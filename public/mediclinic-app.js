@@ -590,6 +590,7 @@
     sessionsLoading: false,
     sessions: [],
     sessionQueues: {},
+    searchPeriod: "",
     sessionQueuePoll: null,
     directory: {
       items: [],
@@ -681,6 +682,18 @@
     const date = new Date(String(value) + "T00:00:00");
     if (Number.isNaN(date.getTime())) return String(value);
     return shortDateFormatter.format(date);
+  }
+
+  /**
+   * Human label for one of the eight clinic-hour periods, e.g. 09:00–10:00.
+   */
+  function periodLabel(value) {
+    if (!value) return "";
+    const start = String(value).slice(0, 5);
+    const hour = Number(start.slice(0, 2));
+    if (!Number.isFinite(hour)) return "";
+    const end = String(hour + 1).padStart(2, "0") + ":00";
+    return start + "–" + end;
   }
 
   function formatTime(value) {
@@ -1941,12 +1954,14 @@
     const q = $("index-q");
     const specialisation = $("index-sp");
     const date = $("index-dt");
+    const period = $("index-period");
     const type = $("index-ty");
 
     return {
       q: q ? q.value.trim() : "",
       specialisationId: specialisation ? specialisation.value : "",
       date: date ? date.value : "",
+      period: period ? period.value : "",
       consultationType: type ? type.value : "",
     };
   }
@@ -1969,6 +1984,8 @@
     const list = document.querySelector("[data-session-list]");
     const heading = document.querySelector("[data-session-heading]");
     const filters = currentFilters();
+    const period = periodLabel(filters.period);
+    state.searchPeriod = filters.period;
 
     state.sessionsLoading = true;
 
@@ -1995,7 +2012,7 @@
           );
           if (allUpcoming.length > 0) {
             sessions = allUpcoming;
-            fallbackNotice = `No sessions match for ${formatDate(filters.date)}. Showing all upcoming sessions:`;
+            fallbackNotice = `No sessions match for ${formatDate(filters.date)}${period ? " in " + period : ""}. Showing all upcoming sessions:`;
           }
         } catch {
           // keep original empty sessions
@@ -2013,7 +2030,8 @@
           heading.textContent =
             sessions.length +
             (sessions.length === 1 ? " session on " : " sessions on ") +
-            day;
+            day +
+            (period ? " · " + period : "");
         }
       }
 
@@ -2998,11 +3016,7 @@
       el(
         "span",
         "",
-        formatTime(session.startTime) +
-          "–" +
-          formatTime(session.endTime) +
-          " · clinic " +
-          CLINIC_HOURS_LABEL
+        CLINIC_HOURS_LABEL
       ),
       el("span", "", formatDate(session.sessionDate)),
       el("b", "", money(session.feeLkr))
@@ -3203,14 +3217,15 @@
 
     if (title) title.textContent = "Book: " + doctorName(session);
     if (meta) {
+      const requested = periodLabel(state.searchPeriod);
       meta.textContent = [
         formatDate(session.sessionDate),
-        formatTime(session.startTime),
         CLINIC_HOURS_LABEL,
+        requested ? "Requested " + requested : "",
         session.consultationType === "ONLINE" ? "Online" : "Physical",
         session.roomNumber ? "Room " + session.roomNumber : "Chat room",
         money(session.feeLkr),
-      ].join(" · ");
+      ].filter(Boolean).join(" · ");
     }
 
     if (form) form.hidden = false;
