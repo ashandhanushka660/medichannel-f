@@ -1343,6 +1343,7 @@
       }
     } else if (id === "manager") {
       ensureManagerNoticesPanel();
+      void loadAdminSpecialisations();
       void loadManagerNotices();
       void loadStaffAccounts();
       void loadManagerSessionPicker();
@@ -5384,9 +5385,13 @@
         select.dataset.loaded = "true";
       });
     } catch (error) {
-      // Fall back silently; creation will surface the real error.
+      // Keep the selects retryable instead of permanently marking them loaded.
       selects.forEach((select) => {
-        select.dataset.loaded = "true";
+        select.replaceChildren();
+        const retry = el("option", "", "Unable to load specialisations — click to retry");
+        retry.value = "";
+        select.append(retry);
+        select.addEventListener("click", () => void loadAdminSpecialisations(), { once: true });
       });
       console.error(error);
     }
