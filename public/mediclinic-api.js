@@ -490,6 +490,13 @@
       );
     },
 
+    hideAppointment(appointmentId) {
+      return request(
+        "appointments/" + encodeURIComponent(appointmentId) + "/hide",
+        { method: "PATCH", body: {} }
+      );
+    },
+
     pay(appointmentId, method) {
       return request(
         "appointments/" + encodeURIComponent(appointmentId) + "/payments",
@@ -605,6 +612,13 @@
     markNoShow(appointmentId) {
       return request(
         "doctor/appointments/" + encodeURIComponent(appointmentId) + "/no-show",
+        { method: "PATCH", body: {} }
+      );
+    },
+
+    hideDoctorAppointment(appointmentId) {
+      return request(
+        "doctor/appointments/" + encodeURIComponent(appointmentId) + "/hide",
         { method: "PATCH", body: {} }
       );
     },

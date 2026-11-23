@@ -612,6 +612,7 @@
       chatSub: null,
       typingSub: null,
       statusSub: null,
+      statusPoll: null,
     },
     queueSub: null,
     sessionsSub: null,
@@ -1371,6 +1372,13 @@
       }
       if (activeView === "index") {
         stopSessionQueuePolling();
+      }
+      if (activeView === "consult") {
+        stopConsultationStatusPolling();
+        unsubscribe("chat");
+        unsubscribe("typing");
+        unsubscribe("status");
+        unsubscribe("chat-errors");
       }
 
       views.forEach((item) => {
@@ -3173,6 +3181,21 @@
       cancelWrap.append(cancelButton);
       actions.append(cancelWrap);
 
+      // Cleared rows disappear only from this participant's history view.
+      // Active appointments can never be cleared.
+      if (
+        ["COMPLETED", "NO_SHOW", "CANCELLED"].includes(appointment.status)
+      ) {
+        actions.append(
+          actionButton(
+            "Clear from history",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "clear-appointment",
+            appointment.appointmentId
+          )
+        );
+      }
+
       row.append(actions);
       tbody.append(row);
     });
@@ -3366,6 +3389,110 @@
       }
     } catch (error) {
       setAppMessage(error.message);
+      if (button) button.disabled = false;
+    }
+  }
+
+  /**
+   * Shared Yes/No message box for participant-scoped history clearing. It
+   * reuses the global message element so no extra dialog is needed, and puts
+   * that element back into its normal hidden state when the user answers.
+   */
+  function confirmClearHistory(scope) {
+    const notice = $("app-session-warning");
+    if (!notice) return Promise.resolve(false);
+
+    const patientScope = scope !== "doctor";
+    const previousRole = notice.getAttribute("role");
+
+    return new Promise((resolve) => {
+      const overlay = el(
+        "div",
+        "fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4"
+      );
+      document.body.append(overlay);
+      overlay.append(notice);
+
+      notice.hidden = false;
+      notice.className =
+        "w-full max-w-md rounded-xl border border-line bg-white p-5 text-ink shadow-xl";
+      notice.setAttribute("role", "dialog");
+      notice.setAttribute("aria-modal", "true");
+      notice.setAttribute("aria-labelledby", "clear-history-title");
+      notice.replaceChildren();
+
+      const title = el(
+        "h2",
+        "text-base font-semibold text-ink",
+        patientScope
+          ? "Clear this appointment from your history?"
+          : "Clear this patient from your session history?"
+      );
+      title.id = "clear-history-title";
+
+      const message = el(
+        "p",
+        "mt-2 text-sm text-slate2",
+        patientScope
+          ? "Only this row is removed from My appointments. The appointment, payment and medical records remain in the hospital system."
+          : "Only this row is removed from Patients in this session. The appointment, payment and medical records remain in the hospital system."
+      );
+
+      const actions = el("div", "mt-5 flex flex-wrap justify-end gap-2");
+      const no = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs",
+        "No"
+      );
+      no.type = "button";
+      const yes = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-9 px-3 py-1.5 text-xs",
+        "Yes"
+      );
+      yes.type = "button";
+
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        overlay.remove();
+        document.body.append(notice);
+        notice.replaceChildren();
+        notice.hidden = true;
+        if (previousRole) notice.setAttribute("role", previousRole);
+        else notice.removeAttribute("role");
+        notice.removeAttribute("aria-modal");
+        notice.removeAttribute("aria-labelledby");
+        resolve(value);
+      };
+
+      no.addEventListener("click", () => finish(false));
+      yes.addEventListener("click", () => finish(true));
+      actions.append(no, yes);
+      notice.append(title, message, actions);
+      setTimeout(() => no.focus(), 0);
+    });
+  }
+
+  async function clearAppointmentHistory(appointmentId, button) {
+    if (button) button.disabled = true;
+
+    const confirmed = await confirmClearHistory("patient");
+    if (!confirmed) {
+      if (button) button.disabled = false;
+      return;
+    }
+
+    try {
+      await MC.hideAppointment(appointmentId);
+      await loadAppointments();
+      setAppMessage(
+        "Appointment cleared from your history. Hospital records are unchanged.",
+        "success"
+      );
+    } catch (error) {
+      setAppMessage(error.message, "error");
       if (button) button.disabled = false;
     }
   }
@@ -4127,6 +4254,21 @@
         );
       }
 
+      // Closed rows can be cleared one by one from the doctor's own view
+      // without changing the patient's view or the hospital record.
+      if (
+        ["COMPLETED", "NO_SHOW", "CANCELLED"].includes(appointment.status)
+      ) {
+        actions.append(
+          doctorAction(
+            "Clear from history",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "clear",
+            appointment.appointmentId
+          )
+        );
+      }
+
       if (!actions.childNodes.length) {
         actions.append(document.createTextNode("—"));
       }
@@ -4296,6 +4438,19 @@
       } else if (name === "noshow") {
         await MC.markNoShow(appointmentId);
         setStatus(statusNode, "Appointment marked as a no-show.");
+      } else if (name === "clear") {
+        const confirmed = await confirmClearHistory("doctor");
+        if (!confirmed) {
+          if (button) button.disabled = false;
+          return;
+        }
+        await MC.hideDoctorAppointment(appointmentId);
+        setStatus(
+          statusNode,
+          "Patient cleared from this session history. Hospital records are unchanged."
+        );
+        await loadDoctorQueue(state.doctor.sessionId, { silent: true });
+        return;
       } else if (name === "notes" || name === "chat") {
         if (button) button.disabled = false;
         if (name === "chat") {
@@ -4753,11 +4908,28 @@
           ? await MC.doctorAppointments({})
           : await MC.myAppointments();
 
-      const appointments = (Array.isArray(list) ? list : []).filter(
-        (item) =>
-          item &&
-          ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
-      );
+      // Never open an old completed room by default. Active rooms come first,
+      // then rooms the doctor can open now, with closed transcripts last.
+      const priority = {
+        IN_CONSULTATION: 0,
+        ARRIVED: 1,
+        BOOKED: 2,
+        COMPLETED: 3,
+      };
+      const appointments = (Array.isArray(list) ? list : [])
+        .filter(
+          (item) =>
+            item &&
+            ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
+        )
+        .sort((a, b) => {
+          const difference =
+            (priority[a.status] ?? 9) - (priority[b.status] ?? 9);
+          if (difference) return difference;
+          return String(b.sessionDate || "").localeCompare(
+            String(a.sessionDate || "")
+          );
+        });
 
       state.consult.list = appointments;
 
@@ -5096,6 +5268,70 @@
   }
 
   /**
+   * A locked room is a normal lifecycle state, not an error. Show the next
+   * action instead of calling chat history and turning a 403 into a scary
+   * red card. The doctor can open the room; the patient can refresh it.
+   */
+  function renderConsultWaiting(appointment) {
+    const log = document.querySelector("[data-chat-log]");
+    if (!log || !appointment) return;
+
+    const doctor = S && S.role === "DOCTOR";
+    const canStart =
+      doctor &&
+      appointment.consultationType === "ONLINE" &&
+      ["BOOKED", "ARRIVED"].includes(appointment.status);
+    const paid = appointment.paymentStatus === "PAID";
+
+    let message;
+    if (canStart && paid) {
+      message =
+        "This room is ready. Start the consultation to open the private chat for both you and the patient.";
+    } else if (canStart) {
+      message =
+        "Record the appointment payment before starting. The private chat opens for both of you as soon as the consultation starts.";
+    } else if (doctor) {
+      message =
+        "This room is not active. Choose an active or upcoming consultation from the picker to continue the conversation.";
+    } else {
+      message =
+        "The private chat opens as soon as your doctor starts this consultation. Refresh any time — there is nothing you need to do.";
+    }
+
+    const card = el(
+      "div",
+      "rounded-lg border border-line bg-snow p-3 text-sm text-slate2"
+    );
+    card.append(el("p", "whitespace-pre-wrap", message));
+
+    const actions = el("div", "mt-2 flex flex-wrap gap-2");
+    if (canStart) {
+      const start = chatActionButton("Start consultation", () =>
+        void startConsultationFromRoom(appointment.appointmentId)
+      );
+      start.disabled = !paid;
+      actions.append(start);
+    } else {
+      actions.append(
+        chatActionButton("Refresh consultation status", async () => {
+          await refreshConsultationStatus(appointment.appointmentId);
+          const current =
+            String(state.consult.appointmentId) === String(appointment.appointmentId)
+              ? state.consult.appointment
+              : appointment;
+          if (current && current.status === "IN_CONSULTATION") {
+            await loadChatHistory(appointment.appointmentId);
+          } else {
+            renderConsultWaiting(current || appointment);
+          }
+        })
+      );
+    }
+    card.append(actions);
+    log.replaceChildren(card);
+  }
+
+  /**
    * Re-read the appointment lifecycle from the server. The doctor can start
    * the room in another tab, so cached queue/appointment rows are not enough
    * to decide whether the chat is unlocked.
@@ -5157,11 +5393,11 @@
       const active = await refreshConsultationStatus(appointmentId);
       if (active) {
         setAppMessage("");
-        await loadChatHistory(appointmentId);
+        await loadChatHistory(appointmentId, { force: true });
       } else {
-        setAppMessage(
-          "The consultation room is still locked. Refresh and try again.",
-          "warning"
+        setAppMessage("");
+        renderConsultWaiting(
+          state.consult.appointment || { appointmentId, status: "BOOKED" }
         );
       }
     } catch (error) {
@@ -5187,7 +5423,7 @@
     }
     controls.replaceChildren();
 
-    if (appointment.status === "IN_CONSULTATION") return;
+    if (["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)) return;
 
     if (
       S.role === "DOCTOR" &&
@@ -5213,14 +5449,15 @@
     } else if (S.role === "CUSTOMER") {
       controls.append(
         chatActionButton("Refresh consultation status", async () => {
-          const active = await refreshConsultationStatus(appointment.appointmentId);
-          if (active) {
-            void loadChatHistory(appointment.appointmentId);
+          await refreshConsultationStatus(appointment.appointmentId);
+          const current =
+            String(state.consult.appointmentId) === String(appointment.appointmentId)
+              ? state.consult.appointment
+              : appointment;
+          if (current && current.status === "IN_CONSULTATION") {
+            await loadChatHistory(appointment.appointmentId, { force: true });
           } else {
-            setAppMessage(
-              "Your doctor has not opened the consultation room yet. You can retry any time.",
-              "warning"
-            );
+            renderConsultWaiting(current || appointment);
           }
         })
       );
@@ -5232,6 +5469,22 @@
     if (!log) return;
 
     const settings = options || {};
+    const current =
+      String(state.consult.appointmentId) === String(appointmentId)
+        ? state.consult.appointment
+        : null;
+
+    // A locked room is an expected lifecycle state. Do not ask the server for
+    // a transcript we know will be rejected; show the next action instead.
+    if (
+      !settings.force &&
+      current &&
+      !["IN_CONSULTATION", "COMPLETED"].includes(current.status)
+    ) {
+      renderConsultWaiting(current);
+      return;
+    }
+
     log.style.opacity = "0.7";
 
     try {
@@ -5254,37 +5507,26 @@
       const locked = error && error.status === 403 &&
         /active consultation|in consultation|not.*started/i.test(message);
 
-      // The room may have been opened by the doctor while this tab was idle.
-      // Refresh once before showing an error so the two accounts can chat.
+      // The room may have opened in the other tab while this one was idle.
+      // Re-read the lifecycle once; COMPLETED is now a readable transcript.
       if (locked && !settings.retried) {
-        const active = await refreshConsultationStatus(appointmentId);
-        if (active) {
-          return loadChatHistory(appointmentId, { retried: true });
-        }
+        await refreshConsultationStatus(appointmentId);
+        return loadChatHistory(appointmentId, {
+          retried: true,
+          force: true,
+        });
       }
 
-      const actions = [
-        chatActionButton("Retry", () => void loadChatHistory(appointmentId)),
-      ];
-      if (
-        S && S.role === "DOCTOR" &&
-        ["BOOKED", "ARRIVED"].includes(
-          (state.consult.appointment || {}).status
-        )
-      ) {
-        actions.push(
-          chatActionButton("Start consultation", () =>
-            void startConsultationFromRoom(appointmentId)
-          )
-        );
+      if (locked) {
+        renderConsultWaiting(current || { appointmentId });
+        return;
       }
 
-      showChatNotice(
-        locked
-          ? message + " The doctor opens the room by starting the consultation; you can retry any time."
-          : message,
-        actions
-      );
+      showChatNotice(message, [
+        chatActionButton("Retry", () =>
+          void loadChatHistory(appointmentId, { force: true })
+        ),
+      ]);
     } finally {
       log.style.opacity = "1";
     }
@@ -5317,12 +5559,84 @@
     log.append(wrapper);
   }
 
+  /**
+   * The broker only authorises chat/status topics while an appointment is
+   * IN_CONSULTATION. Subscribing from a booking or a closed transcript makes
+   * the server reject the frame and surfaces "not authorized" in every row of
+   * My appointments / Patients in this session. Poll the appointment lifecycle
+   * quietly until it opens, then switch to real-time topics.
+   */
+  function stopConsultationStatusPolling() {
+    if (state.consult.statusPoll) {
+      clearInterval(state.consult.statusPoll);
+      state.consult.statusPoll = null;
+    }
+  }
+
+  function startConsultationStatusPolling(appointmentId) {
+    stopConsultationStatusPolling();
+
+    const check = async () => {
+      const sameRoom =
+        String(state.consult.appointmentId) === String(appointmentId);
+      if (
+        activeView !== "consult" ||
+        !sameRoom ||
+        !state.consult.appointment
+      ) {
+        stopConsultationStatusPolling();
+        return;
+      }
+
+      const status = state.consult.appointment.status;
+      if (status === "IN_CONSULTATION") {
+        stopConsultationStatusPolling();
+        subscribeConsultation(state.consult.appointment);
+        return;
+      }
+      if (!["BOOKED", "ARRIVED"].includes(status)) {
+        stopConsultationStatusPolling();
+        return;
+      }
+
+      const active = await refreshConsultationStatus(appointmentId);
+      if (
+        active &&
+        activeView === "consult" &&
+        String(state.consult.appointmentId) === String(appointmentId) &&
+        state.consult.appointment &&
+        state.consult.appointment.status === "IN_CONSULTATION"
+      ) {
+        stopConsultationStatusPolling();
+        await loadChatHistory(appointmentId, { force: true });
+        subscribeConsultation(state.consult.appointment);
+      }
+    };
+
+    void check();
+    state.consult.statusPoll = setInterval(() => void check(), 4000);
+  }
+
   function subscribeConsultation(appointment) {
+    if (!appointment) return;
     const id = appointment.appointmentId;
 
-    if (state.consult.chatSub) unsubscribe("chat");
-    if (state.consult.typingSub) unsubscribe("typing");
-    if (state.consult.statusSub) unsubscribe("status");
+    stopConsultationStatusPolling();
+    unsubscribe("chat");
+    unsubscribe("typing");
+    unsubscribe("status");
+    unsubscribe("chat-errors");
+    state.consult.chatSub = null;
+    state.consult.typingSub = null;
+    state.consult.statusSub = null;
+
+    // Never send an unauthorised STOMP subscription for a booked/closed room.
+    if (appointment.status !== "IN_CONSULTATION") {
+      if (["BOOKED", "ARRIVED"].includes(appointment.status)) {
+        startConsultationStatusPolling(id);
+      }
+      return;
+    }
 
     state.consult.chatSub = subscribe(
       "chat",
@@ -5382,13 +5696,26 @@
         state.consult.appointment.status = payload.status;
         renderConsultHeader(state.consult.appointment);
 
+        if (payload.status !== "IN_CONSULTATION") {
+          unsubscribe("chat");
+          unsubscribe("typing");
+          unsubscribe("status");
+          unsubscribe("chat-errors");
+          state.consult.chatSub = null;
+          state.consult.typingSub = null;
+          state.consult.statusSub = null;
+          if (["BOOKED", "ARRIVED"].includes(payload.status)) {
+            startConsultationStatusPolling(id);
+          }
+        }
+
         // The doctor may open the room while this tab is on the consultation
         // page. Reload automatically instead of leaving a stale lock message.
         if (
           previous !== "IN_CONSULTATION" &&
           payload.status === "IN_CONSULTATION"
         ) {
-          void loadChatHistory(id);
+          void loadChatHistory(id, { force: true });
         }
 
         if (payload.status === "COMPLETED") {
@@ -8396,6 +8723,12 @@
     const cancel = event.target.closest("[data-cancel-appointment]");
     if (cancel) {
       void cancelAppointment(cancel.dataset.cancelAppointment, cancel);
+      return;
+    }
+
+    const clear = event.target.closest("[data-clear-appointment]");
+    if (clear) {
+      void clearAppointmentHistory(clear.dataset.clearAppointment, clear);
       return;
     }
 

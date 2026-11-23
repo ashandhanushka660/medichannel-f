@@ -37,7 +37,26 @@ test("a locked consultation room refreshes server status once before failing", (
   assert.match(APP, /MC\.myAppointment\(appointmentId\)/);
   assert.match(APP, /MC\.doctorAppointments\(\{\}\)/);
   assert.match(APP, /locked && !settings\.retried/);
-  assert.match(APP, /return loadChatHistory\(appointmentId, \{ retried: true \}\)/);
+  assert.match(
+    APP,
+    /return loadChatHistory\(appointmentId, \{\s*retried: true,\s*force: true,\s*\}\);/
+  );
+});
+
+test("locked and completed rooms never show the generic consultation error", () => {
+  assert.match(APP, /function renderConsultWaiting\(appointment\)/);
+  assert.match(APP, /!\["IN_CONSULTATION", "COMPLETED"\]\.includes\(current\.status\)/);
+  assert.match(APP, /renderConsultWaiting\(current \|\| \{ appointmentId \}\)/);
+  assert.doesNotMatch(
+    APP,
+    /message \+ " The doctor opens the room by starting the consultation/
+  );
+});
+
+test("the consultation picker opens active rooms before closed transcripts", () => {
+  assert.match(APP, /IN_CONSULTATION: 0,/);
+  assert.match(APP, /COMPLETED: 3,/);
+  assert.match(APP, /priority\[a\.status\] \?\? 9/);
 });
 
 test("both roles have a visible control to open or refresh the room", () => {
@@ -47,7 +66,19 @@ test("both roles have a visible control to open or refresh the room", () => {
   assert.match(APP, /payload\.status === "IN_CONSULTATION"/);
 });
 
+test("booked and closed rooms never send unauthorised chat subscriptions", () => {
+  const block = APP.match(/function subscribeConsultation\(appointment\) \{([\s\S]*?)\n  \}/);
+  assert.ok(block, "subscribeConsultation was not found");
+  const guard = block[1].indexOf('if (appointment.status !== "IN_CONSULTATION")');
+  const firstTopic = block[1].indexOf('"/topic/appointments/" + id + "/chat"');
+  assert.ok(guard >= 0, "missing non-active status guard");
+  assert.ok(firstTopic >= 0, "missing chat topic");
+  assert.ok(guard < firstTopic, "chat topics are subscribed before the status guard");
+  assert.match(APP, /function startConsultationStatusPolling\(appointmentId\)/);
+  assert.match(APP, /function stopConsultationStatusPolling\(\)/);
+});
+
 test("browser cache is busted after asset changes", () => {
-  assert.match(HTML, /mediclinic-app(?:\.min)?\.js\?v=20261123d/);
-  assert.match(HTML, /mediclinic-api\.js\?v=20261123d/);
+  assert.match(HTML, /mediclinic-app(?:\.min)?\.js\?v=20261123g/);
+  assert.match(HTML, /mediclinic-api\.js\?v=20261123g/);
 });
