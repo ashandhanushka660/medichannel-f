@@ -574,6 +574,7 @@
 
   const state = {
     notifications: [],
+    syncedSummaryNotifications: new Set(),
     notificationTimer: null,
     specialisationsLoaded: false,
     sessionsLoaded: false,
@@ -1617,6 +1618,7 @@
       if (state.notificationTimer) clearInterval(state.notificationTimer);
       state.notificationTimer = null;
       state.notifications = [];
+      state.syncedSummaryNotifications.clear();
       renderNotificationBadge(0);
       return;
     }
@@ -1633,6 +1635,7 @@
     state.consult.appointment = null;
     state.consult.summary = null;
     state.consult.list = [];
+    state.syncedSummaryNotifications.clear();
 
     S = {
       id: user.id || user.userId || null,
@@ -1654,6 +1657,7 @@
     state.patientPollTimer = null;
     if (state.notificationTimer) clearInterval(state.notificationTimer);
     state.notificationTimer = null;
+    state.syncedSummaryNotifications.clear();
     disconnectRealtime();
     render();
     hideQueue();
@@ -1870,6 +1874,38 @@
     }
   }
 
+  /**
+   * A published summary is pushed as SUMMARY_AVAILABLE. The patient may have
+   * opened the room before the doctor published, so reload that appointment's
+   * clinical summary instead of leaving the old "not available yet" card.
+   */
+  function syncSummaryNotification(notification) {
+    if (!S || S.role !== "CUSTOMER" || !notification) return;
+
+    const type = String(notification.type || "").toUpperCase();
+    if (!type.includes("SUMMARY")) return;
+
+    const appointmentId = notification.appointmentId;
+    if (!appointmentId) return;
+
+    const key = String(notification.notificationId || appointmentId);
+    if (state.syncedSummaryNotifications.has(key)) return;
+    state.syncedSummaryNotifications.add(key);
+
+    // Remember the row so navigating to the consultation window later opens
+    // the appointment the doctor just published, not an arbitrary first row.
+    state.consult.requestedId = appointmentId;
+
+    if (activeView !== "consult") return;
+
+    if (String(state.consult.appointmentId || "") !== String(appointmentId)) {
+      void loadConsultationPicker();
+      return;
+    }
+
+    void loadConsultSummary(appointmentId);
+  }
+
   function handleIncomingNotification(notification) {
     if (!S || !notification || !notification.notificationId) return;
     const exists = state.notifications.some(
@@ -1896,6 +1932,7 @@
         }
       });
     } else if (S.role === "CUSTOMER") {
+      syncSummaryNotification(notification);
       void loadAppointments();
       void refreshPatientQueue();
     }
@@ -1911,6 +1948,7 @@
       state.notificationsLoaded = true;
       const prevCount = (state.notifications || []).filter((n) => !n.read).length;
       state.notifications = items;
+      unread.forEach(syncSummaryNotification);
       if (!isInitial && unread.length > prevCount && unread.length > 0) {
         const latest = unread[0] || unread[unread.length - 1];
         showNotificationToast(latest);
@@ -2052,6 +2090,11 @@
         link.href = "#consult";
         link.className = "text-xs font-semibold text-brand hover:underline mt-0.5 inline-block";
         link.textContent = "Open consultation →";
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          state.consult.requestedId = n.appointmentId;
+          nav("consult");
+        });
         item.append(link);
       }
 
@@ -5817,7 +5860,8 @@
     }, 4000);
   }
 
-  async function loadConsultSummary(appointmentId) {
+  async function loadConsultSummary(appointmentId, options) {
+    const settings = options || {};
     const empty = document.querySelector("[data-summary-empty]");
     const summary = document.querySelector("[data-summary]");
     const symptoms = document.querySelector("[data-summary-symptoms]");
@@ -5847,7 +5891,11 @@
       if (!record) {
         state.consult.summary = null;
         if (summary) summary.hidden = true;
-        if (empty) empty.hidden = false;
+        if (empty) {
+          empty.hidden = false;
+          empty.textContent =
+            "The summary appears here after the doctor completes the consultation.";
+        }
         updateDoctorConsultSummaryBox(null);
         return;
       }
@@ -5880,6 +5928,16 @@
       }
       updateDoctorConsultSummaryBox(record);
     } catch (error) {
+      // The patient's cached appointment status can lag behind the doctor's
+      // publish action. Re-read it once and retry before showing an error.
+      if (
+        !settings.retried &&
+        (error.status === 403 || error.status === 404)
+      ) {
+        await refreshConsultationStatus(appointmentId);
+        return loadConsultSummary(appointmentId, { retried: true });
+      }
+
       state.consult.summary = null;
       if (summary) summary.hidden = true;
       if (empty) {
@@ -8396,6 +8454,7 @@
     state.consult.summary = null;
     state.consult.list = [];
     state.notifications = [];
+    state.syncedSummaryNotifications.clear();
     state.notificationsLoaded = false;
     if (state.auditLogTimer) clearInterval(state.auditLogTimer);
     state.auditLogTimer = null;
