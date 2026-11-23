@@ -521,6 +521,10 @@
       return request("reviews/me");
     },
 
+    doctorReviews(doctorId) {
+      return request("doctors/" + encodeURIComponent(doctorId) + "/reviews");
+    },
+
     // Patient profile -------------------------------------------------
     myProfile() {
       return request("patients/me");

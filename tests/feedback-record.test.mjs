@@ -6,6 +6,10 @@ const APP_SOURCE = readFileSync(
   new URL("../public/mediclinic-app.js", import.meta.url),
   "utf8"
 );
+const API_SOURCE = readFileSync(
+  new URL("../public/mediclinic-api.js", import.meta.url),
+  "utf8"
+);
 const HTML_SOURCE = readFileSync(
   new URL("../public/mediclinic-system.html", import.meta.url),
   "utf8"
@@ -34,7 +38,7 @@ function functionSource(name) {
   throw new Error(`Unterminated function: ${name}`);
 }
 
-function makeHarness() {
+function makeHarness(role = "CUSTOMER") {
   const nodes = new Map();
   const node = (key, extras = {}) => {
     if (!nodes.has(key)) {
@@ -59,7 +63,11 @@ function makeHarness() {
 
   const state = {
     consult: {
-      appointment: { appointmentId: "appointment-77", status: "COMPLETED" },
+      appointment: {
+        appointmentId: "appointment-77",
+        sessionId: "session-1",
+        status: "COMPLETED",
+      },
       summary: {
         diagnosis: "Tension headache",
         prescription: "Rest and hydration",
@@ -67,6 +75,9 @@ function makeHarness() {
     },
     myReviews: [],
     submittedFeedbackIds: new Set(),
+    doctor: {
+      sessions: [{ sessionId: "session-1", doctorId: "doctor-1" }],
+    },
   };
 
   const calls = [];
@@ -86,12 +97,25 @@ function makeHarness() {
       calls.push(["myReviews"]);
       return state.myReviews;
     },
+    doctorSessions: async () => {
+      calls.push(["doctorSessions"]);
+      return state.doctor.sessions;
+    },
+    doctorReviews: async (doctorId) => {
+      calls.push(["doctorReviews", doctorId]);
+      return {
+        doctorId,
+        averageRating: 4.5,
+        reviewCount: 1,
+        reviews: state.myReviews,
+      };
+    },
   };
 
   const sandbox = {
     document,
     state,
-    S: { role: "CUSTOMER" },
+    S: { role },
     MC,
     $: (id) => document.querySelector(`#${id}`),
     setStatus: (target, message) => {
@@ -104,18 +128,19 @@ function makeHarness() {
   };
 
   const source = [
-    "findMyReview",
-    "hasSubmittedFeedback",
+    "findConsultationReview",
+    "hasConsultationFeedback",
     "renderFeedbackRecord",
     "updateConsultSummaryLine",
     "markFeedbackSubmitted",
     "submitFeedback",
-    "loadPatientReviewState",
+    "doctorIdForConsultation",
+    "loadConsultationReviewState",
   ].map(functionSource).join("\n\n");
 
   const api = new Function(
     ...Object.keys(sandbox),
-    `${source}\nreturn { submitFeedback, loadPatientReviewState };`
+    `${source}\nreturn { submitFeedback, loadConsultationReviewState };`
   )(...Object.values(sandbox));
 
   return { api, calls, document, node, state };
@@ -123,11 +148,15 @@ function makeHarness() {
 
 test("submitted feedback is shown in the consultation summary and feedback card", async () => {
   assert.match(HTML_SOURCE, /data-feedback-record/);
+  assert.match(HTML_SOURCE, /data-feedback-record-title/);
   assert.match(HTML_SOURCE, /data-feedback-rating/);
   assert.match(HTML_SOURCE, /data-feedback-comment/);
   assert.match(HTML_SOURCE, /data-feedback-state/);
   assert.match(APP_SOURCE, /const saved = await MC\.submitReview/);
-  assert.match(APP_SOURCE, /renderFeedbackRecord\(review \|\| findMyReview\(appointmentId\)\)/);
+  assert.match(
+    APP_SOURCE,
+    /renderFeedbackRecord\(review \|\| findConsultationReview\(appointmentId\)\)/
+  );
 
   const { api, calls, node } = makeHarness();
 
@@ -138,6 +167,7 @@ test("submitted feedback is shown in the consultation summary and feedback card"
   assert.equal(node("button[type=submit]").textContent, "Feedback submitted");
   assert.match(node("[data-feedback-status]").textContent, /Thank you/);
   assert.equal(node("[data-feedback-record]").hidden, false);
+  assert.equal(node("[data-feedback-record-title]").textContent, "Your feedback");
   assert.equal(node("[data-feedback-rating]").textContent, "4/5 · ★★★★☆");
   assert.match(node("[data-feedback-comment]").textContent, /Helpful doctor/);
   assert.equal(
@@ -158,7 +188,7 @@ test("an existing review from reviews/me is shown when the consultation opens", 
     },
   ];
 
-  await api.loadPatientReviewState("appointment-77");
+  await api.loadConsultationReviewState("appointment-77");
 
   assert.deepEqual(calls[0], ["myReviews"]);
   assert.equal(node("[data-feedback-record]").hidden, false);
@@ -168,5 +198,40 @@ test("an existing review from reviews/me is shown when the consultation opens", 
   assert.equal(
     node("[data-consult-summary-line]").textContent,
     "Consultation summary published. Your feedback has been recorded."
+  );
+});
+
+test("the doctor sees the patient feedback for the open consultation right away", async () => {
+  assert.match(API_SOURCE, /doctorReviews\(doctorId\)/);
+  assert.match(API_SOURCE, /doctors\/.*\/reviews/);
+  assert.match(APP_SOURCE, /function syncReviewNotification\(notification\)/);
+  assert.match(APP_SOURCE, /type\.includes\("REVIEW"\)/);
+  assert.match(APP_SOURCE, /syncReviewNotification\(notification\)/);
+  assert.match(APP_SOURCE, /void loadConsultationReviewState\(appointmentId\)/);
+
+  const { api, calls, node, state } = makeHarness("DOCTOR");
+  state.myReviews = [
+    {
+      reviewId: "review-doctor-1",
+      appointmentId: "appointment-77",
+      doctorId: "doctor-1",
+      rating: 4,
+      comment: "Very helpful consultation",
+      moderationStatus: "APPROVED",
+      createdAt: "2026-11-23T11:00:00Z",
+    },
+  ];
+
+  await api.loadConsultationReviewState("appointment-77");
+
+  assert.deepEqual(calls[0], ["doctorReviews", "doctor-1"]);
+  assert.equal(node("[data-feedback-record]").hidden, false);
+  assert.equal(node("[data-feedback-record-title]").textContent, "Patient feedback");
+  assert.equal(node("[data-feedback-rating]").textContent, "4/5 · ★★★★☆");
+  assert.match(node("[data-feedback-comment]").textContent, /Very helpful consultation/);
+  assert.equal(node("[data-feedback-status]").textContent, "Patient feedback has been recorded.");
+  assert.equal(
+    node("[data-consult-summary-line]").textContent,
+    "Consultation summary published. Patient feedback has been recorded."
   );
 });

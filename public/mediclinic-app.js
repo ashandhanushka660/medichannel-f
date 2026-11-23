@@ -575,6 +575,7 @@
   const state = {
     notifications: [],
     syncedSummaryNotifications: new Set(),
+    syncedReviewNotifications: new Set(),
     notificationTimer: null,
     specialisationsLoaded: false,
     sessionsLoaded: false,
@@ -1620,6 +1621,7 @@
       state.notificationTimer = null;
       state.notifications = [];
       state.syncedSummaryNotifications.clear();
+      state.syncedReviewNotifications.clear();
       state.myReviews = [];
       state.submittedFeedbackIds.clear();
       renderNotificationBadge(0);
@@ -1639,8 +1641,17 @@
     state.consult.summary = null;
     state.consult.list = [];
     state.syncedSummaryNotifications.clear();
+    state.syncedReviewNotifications.clear();
     state.myReviews = [];
     state.submittedFeedbackIds.clear();
+    state.doctor.sessions = [];
+    state.doctor.sessionsLoaded = false;
+    state.doctor.sessionId = null;
+    state.doctor.queue = null;
+    state.doctor.selected = null;
+    state.doctor.summary = null;
+    state.doctor.allAppointments = [];
+    state.doctor.sessionAppointments = [];
 
     S = {
       id: user.id || user.userId || null,
@@ -1663,6 +1674,7 @@
     if (state.notificationTimer) clearInterval(state.notificationTimer);
     state.notificationTimer = null;
     state.syncedSummaryNotifications.clear();
+    state.syncedReviewNotifications.clear();
     state.submittedFeedbackIds.clear();
     disconnectRealtime();
     render();
@@ -1912,6 +1924,35 @@
     void loadConsultSummary(appointmentId);
   }
 
+  /**
+   * A patient's feedback is pushed to the doctor as REVIEW_RECEIVED. Reload the
+   * consultation's feedback card immediately when that room is open; otherwise
+   * remember it so the notification's "Open consultation" link selects it.
+   */
+  function syncReviewNotification(notification) {
+    if (!S || S.role !== "DOCTOR" || !notification) return;
+
+    const type = String(notification.type || "").toUpperCase();
+    if (!type.includes("REVIEW") && !type.includes("FEEDBACK")) return;
+
+    const appointmentId = notification.appointmentId;
+    if (!appointmentId) return;
+
+    const key = String(notification.notificationId || appointmentId);
+    if (state.syncedReviewNotifications.has(key)) return;
+    state.syncedReviewNotifications.add(key);
+
+    state.consult.requestedId = appointmentId;
+    if (activeView !== "consult") return;
+
+    if (String(state.consult.appointmentId || "") !== String(appointmentId)) {
+      void loadConsultationPicker();
+      return;
+    }
+
+    void loadConsultationReviewState(appointmentId);
+  }
+
   function handleIncomingNotification(notification) {
     if (!S || !notification || !notification.notificationId) return;
     const exists = state.notifications.some(
@@ -1925,6 +1966,7 @@
     showNotificationToast(notification);
 
     if (S.role === "DOCTOR") {
+      syncReviewNotification(notification);
       if (state.doctor.sessionId) {
         void loadDoctorQueue(state.doctor.sessionId, { silent: true });
       }
@@ -1954,7 +1996,10 @@
       state.notificationsLoaded = true;
       const prevCount = (state.notifications || []).filter((n) => !n.read).length;
       state.notifications = items;
-      unread.forEach(syncSummaryNotification);
+      unread.forEach((notification) => {
+        syncSummaryNotification(notification);
+        syncReviewNotification(notification);
+      });
       if (!isInitial && unread.length > prevCount && unread.length > 0) {
         const latest = unread[0] || unread[unread.length - 1];
         showNotificationToast(latest);
@@ -5177,7 +5222,7 @@
     await Promise.allSettled([
       loadChatHistory(appointmentId),
       loadConsultSummary(appointmentId),
-      loadPatientReviewState(appointmentId),
+      loadConsultationReviewState(appointmentId),
     ]);
 
     subscribeConsultation(appointment);
@@ -6074,12 +6119,12 @@
     if (comment) comment.disabled = false;
     setStatus(document.querySelector("[data-feedback-status]"), "");
     renderFeedbackRecord(
-      findMyReview(state.consult.appointment && state.consult.appointment.appointmentId)
+      findConsultationReview(state.consult.appointment && state.consult.appointment.appointmentId)
     );
     updateConsultSummaryLine(Boolean(state.consult.summary));
   }
 
-  function findMyReview(appointmentId) {
+  function findConsultationReview(appointmentId) {
     if (!appointmentId) return null;
     return (
       (state.myReviews || []).find(
@@ -6090,17 +6135,23 @@
     );
   }
 
-  function hasSubmittedFeedback(appointmentId) {
+  function hasConsultationFeedback(appointmentId) {
     return Boolean(
       appointmentId &&
         (state.submittedFeedbackIds.has(String(appointmentId)) ||
-          findMyReview(appointmentId))
+          findConsultationReview(appointmentId))
     );
   }
 
   function renderFeedbackRecord(review) {
     const card = document.querySelector("[data-feedback-record]");
     if (!card) return;
+
+    const title = document.querySelector("[data-feedback-record-title]");
+    if (title) {
+      title.textContent =
+        S && S.role === "DOCTOR" ? "Patient feedback" : "Your feedback";
+    }
 
     if (!review) {
       card.hidden = true;
@@ -6144,19 +6195,27 @@
     const appointment = state.consult.appointment;
     const appointmentId = appointment && appointment.appointmentId;
 
-    if (hasSubmittedFeedback(appointmentId)) {
-      line.textContent = hasSummary
-        ? "Consultation summary published. Your feedback has been recorded."
-        : "Your feedback has been recorded for this consultation.";
+    const isDoctor = S && S.role === "DOCTOR";
+
+    if (hasConsultationFeedback(appointmentId)) {
+      line.textContent = isDoctor
+        ? hasSummary
+          ? "Consultation summary published. Patient feedback has been recorded."
+          : "Patient feedback has been recorded for this consultation."
+        : hasSummary
+          ? "Consultation summary published. Your feedback has been recorded."
+          : "Your feedback has been recorded for this consultation.";
     } else if (hasSummary) {
       line.textContent =
         "Consultation completed. Clinical summary and prescription are published above.";
     } else if (appointment && appointment.status === "COMPLETED") {
-      line.textContent =
-        "Consultation completed. You can read the summary and leave feedback.";
+      line.textContent = isDoctor
+        ? "Consultation completed. Patient feedback will appear here once submitted."
+        : "Consultation completed. You can read the summary and leave feedback.";
     } else {
-      line.textContent =
-        "Visible to you after the doctor completes the consultation.";
+      line.textContent = isDoctor
+        ? "Feedback appears here after the consultation is completed."
+        : "Visible to you after the doctor completes the consultation.";
     }
   }
 
@@ -6169,8 +6228,13 @@
     const appointmentId =
       state.consult.appointment && state.consult.appointment.appointmentId;
 
-    if (appointmentId) state.submittedFeedbackIds.add(String(appointmentId));
-    renderFeedbackRecord(review || findMyReview(appointmentId));
+    if (
+      appointmentId &&
+      S && S.role === "CUSTOMER"
+    ) {
+      state.submittedFeedbackIds.add(String(appointmentId));
+    }
+    renderFeedbackRecord(review || findConsultationReview(appointmentId));
     updateConsultSummaryLine(Boolean(state.consult.summary));
 
     if (button) {
@@ -6181,17 +6245,78 @@
     if (comment) comment.disabled = true;
     setStatus(
       status,
-      message || "You have already submitted feedback for this consultation."
+      message ||
+        (S && S.role === "DOCTOR"
+          ? "Patient feedback has been recorded."
+          : "You have already submitted feedback for this consultation.")
     );
   }
 
-  async function loadPatientReviewState(appointmentId) {
-    if (!S || S.role !== "CUSTOMER") return;
+  async function doctorIdForConsultation(appointment) {
+    if (appointment && appointment.doctorId) return appointment.doctorId;
+
+    const sessions = Array.isArray(state.doctor.sessions)
+      ? state.doctor.sessions
+      : [];
+    const findDoctorId = (items) => {
+      if (!Array.isArray(items)) return null;
+      const matching = items.find(
+        (session) =>
+          session &&
+          appointment &&
+          String(session.sessionId) === String(appointment.sessionId)
+      );
+      return (matching && matching.doctorId) ||
+        (items[0] && items[0].doctorId) ||
+        null;
+    };
+
+    let doctorId = findDoctorId(sessions);
+    if (doctorId) return doctorId;
 
     try {
-      const reviews = await MC.myReviews();
-      state.myReviews = Array.isArray(reviews) ? reviews : [];
-      const review = findMyReview(appointmentId);
+      const fresh = await MC.doctorSessions();
+      state.doctor.sessions = Array.isArray(fresh) ? fresh : [];
+      doctorId = findDoctorId(state.doctor.sessions);
+    } catch {
+      // The queue and picker remain usable if the session lookup fails.
+    }
+    return doctorId;
+  }
+
+  /**
+   * Loads the feedback record for the open consultation. Patients read their
+   * own reviews; doctors read the public reviews for the doctor attached to
+   * the appointment and filter them down to this appointment id.
+   */
+  async function loadConsultationReviewState(appointmentId) {
+    if (!S || !["CUSTOMER", "DOCTOR"].includes(S.role)) return;
+
+    try {
+      let reviews = [];
+      if (S.role === "CUSTOMER") {
+        const own = await MC.myReviews();
+        reviews = Array.isArray(own) ? own : [];
+      } else {
+        const appointment = state.consult.appointment;
+        const doctorId = await doctorIdForConsultation(appointment);
+        if (!doctorId) {
+          state.myReviews = [];
+          renderFeedbackRecord(null);
+          updateConsultSummaryLine(Boolean(state.consult.summary));
+          return;
+        }
+        const response = await MC.doctorReviews(doctorId);
+        reviews =
+          response && Array.isArray(response.reviews)
+            ? response.reviews
+            : Array.isArray(response)
+              ? response
+              : [];
+      }
+
+      state.myReviews = reviews;
+      const review = findConsultationReview(appointmentId);
       if (review) {
         markFeedbackSubmitted(undefined, review);
       } else {
@@ -6213,7 +6338,7 @@
     if (!appointment) return;
 
     const appointmentId = appointment.appointmentId;
-    const existing = findMyReview(appointmentId);
+    const existing = findConsultationReview(appointmentId);
     if (existing || state.submittedFeedbackIds.has(String(appointmentId))) {
       markFeedbackSubmitted(undefined, existing);
       return;
@@ -6250,13 +6375,13 @@
     } catch (error) {
       const duplicate = error.status === 409 || /already|duplicate/i.test(error.message || "");
       if (duplicate) {
-        let review = findMyReview(appointmentId);
+        let review = findConsultationReview(appointmentId);
         if (!review) {
           try {
             const reviews = await MC.myReviews();
             if (Array.isArray(reviews)) {
               state.myReviews = reviews;
-              review = findMyReview(appointmentId);
+              review = findConsultationReview(appointmentId);
             }
           } catch {
             // Keep the submitted id; the record can be read on the next visit.
@@ -8577,6 +8702,7 @@
     state.consult.list = [];
     state.notifications = [];
     state.syncedSummaryNotifications.clear();
+    state.syncedReviewNotifications.clear();
     state.myReviews = [];
     state.submittedFeedbackIds.clear();
     state.notificationsLoaded = false;

@@ -110,6 +110,14 @@ test("staff password reset posts the admin reset route", async () => {
   });
 });
 
+test("doctor feedback uses the doctor's public reviews endpoint", async () => {
+  const { MC, calls } = loadApi();
+  await MC.doctorReviews("doctor-1");
+
+  assert.equal(calls[0].url, "/api/backend/doctors/doctor-1/reviews");
+  assert.equal(calls[0].settings.method, "GET");
+});
+
 test("manager feedback uses GET /reviews/manage", async () => {
   const { MC, calls } = loadApi();
   await MC.managerReviews();

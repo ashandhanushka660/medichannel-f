@@ -34,7 +34,10 @@ test("a published summary reloads from the SUMMARY_AVAILABLE notification", () =
   assert.match(APP_SOURCE, /state\.syncedSummaryNotifications\.has\(key\)/);
   assert.match(APP_SOURCE, /void loadConsultSummary\(appointmentId\)/);
   assert.match(APP_SOURCE, /syncSummaryNotification\(notification\)/);
-  assert.match(APP_SOURCE, /unread\.forEach\(syncSummaryNotification\)/);
+  assert.match(
+    APP_SOURCE,
+    /unread\.forEach\(\(notification\) => \{[\s\S]*syncSummaryNotification\(notification\)[\s\S]*syncReviewNotification\(notification\)/
+  );
   assert.match(APP_SOURCE, /state\.consult\.requestedId = n\.appointmentId/);
 });
 
