@@ -727,6 +727,42 @@
     return dateTimeFormatter.format(date);
   }
 
+  /**
+   * The patient's allocated 10-minute slot, derived from the server's live
+   * estimated start time so delays and cancellations are reflected here too.
+   */
+  function appointmentSlot(value) {
+    const start = value && value.estimatedConsultationTime;
+    const minutes = Number(value && value.minutesPerPatient) || 10;
+    if (!start) return { range: "—", finish: "—", minutes };
+
+    const match = String(start).match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+    if (!match) return { range: formatTime(start), finish: "—", minutes };
+
+    const clock = new Date(
+      Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4]),
+        Number(match[5])
+      )
+    );
+    const finishHour = String(clock.getUTCHours()).padStart(2, "0");
+    const finishMinute = String(clock.getUTCMinutes()).padStart(2, "0");
+    clock.setUTCMinutes(clock.getUTCMinutes() + minutes);
+    const end =
+      String(clock.getUTCHours()).padStart(2, "0") +
+      ":" +
+      String(clock.getUTCMinutes()).padStart(2, "0");
+
+    return {
+      range: finishHour + ":" + finishMinute + "–" + end,
+      finish: end,
+      minutes,
+    };
+  }
+
   function money(value) {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return "—";
@@ -3185,8 +3221,12 @@
     if (reference) reference.textContent = "—";
     const number = document.querySelector("[data-booking-number]");
     if (number) number.textContent = "—";
+    const created = document.querySelector("[data-booking-created]");
+    if (created) created.textContent = "—";
     const estimate = document.querySelector("[data-booking-estimate]");
     if (estimate) estimate.textContent = "—";
+    const slot = document.querySelector("[data-booking-slot]");
+    if (slot) slot.textContent = "—";
     const message = document.querySelector("[data-booking-message]");
     if (message) message.textContent = "";
 
@@ -3368,7 +3408,9 @@
     const wasHidden = success ? success.hidden : true;
     const reference = document.querySelector("[data-booking-reference]");
     const number = document.querySelector("[data-booking-number]");
+    const created = document.querySelector("[data-booking-created]");
     const estimate = document.querySelector("[data-booking-estimate]");
+    const slot = document.querySelector("[data-booking-slot]");
     const message = document.querySelector("[data-booking-message]");
     const pay = document.querySelector("[data-booking-pay]");
 
@@ -3376,12 +3418,27 @@
     if (success) success.hidden = false;
     if (reference) reference.textContent = referenceOf(appointment.bookingReference);
     if (number) number.textContent = "#" + appointment.appointmentNumber;
+    if (created) {
+      created.textContent = appointment.bookedAt
+        ? formatDateTime(appointment.bookedAt)
+        : "just now";
+    }
     if (estimate) {
       estimate.textContent = appointment.estimatedConsultationTime
         ? formatDateTime(appointment.estimatedConsultationTime)
         : session
           ? formatTime(session.startTime)
           : "—";
+    }
+    if (slot) {
+      const allocation = appointmentSlot(appointment);
+      slot.textContent =
+        allocation.range +
+        " · finishes " +
+        allocation.finish +
+        " (" +
+        allocation.minutes +
+        " min)";
     }
 
     if (message) {
@@ -3613,16 +3670,28 @@
       row.dataset.motionAcceptance = appointment.acceptanceStatus || "";
       row.dataset.motionPayment = appointment.paymentStatus || "";
 
+      const allocation = appointmentSlot(appointment);
       const cells = [
         [referenceOf(appointment.bookingReference), "Booking ref"],
         [appointment.doctorName ? doctorName(appointment) : "—", "Doctor"],
         [
           [
-            formatDate(appointment.sessionDate),
-            formatTime(appointment.sessionStartTime),
-          ]
-            .filter(Boolean)
-            .join(" "),
+            appointment.appointmentNumber != null
+              ? "Queue #" + appointment.appointmentNumber
+              : "",
+            [
+              formatDate(appointment.sessionDate),
+              formatTime(appointment.sessionStartTime),
+            ]
+              .filter(Boolean)
+              .join(" "),
+            appointment.bookedAt
+              ? "Booked " + formatDateTime(appointment.bookedAt)
+              : "",
+            allocation.range !== "—"
+              ? "Slot " + allocation.range + " · finishes " + allocation.finish
+              : "",
+          ].filter(Boolean),
           "When",
         ],
         [
@@ -3634,7 +3703,21 @@
       cells.forEach(([value, label]) => {
         const cell = document.createElement("td");
         cell.dataset.label = label;
-        cell.textContent = String(value);
+        if (Array.isArray(value)) {
+          value.forEach((line, index) => {
+            cell.append(
+              el(
+                "div",
+                index === 0
+                  ? "font-semibold text-ink"
+                  : "text-xs text-mute",
+                line
+              )
+            );
+          });
+        } else {
+          cell.textContent = String(value);
+        }
         row.append(cell);
       });
 
@@ -3837,6 +3920,7 @@
 
       setMotionText(card.querySelector("[data-queue-number]"), String(number));
 
+      const allocation = appointmentSlot(current);
       const parts = [
         doctorName(current),
         formatTime(current.sessionStartTime)
@@ -3845,6 +3929,7 @@
         APPT_STATUS[current.status]
           ? APPT_STATUS[current.status][0]
           : titleCase(current.status),
+        "Your slot " + allocation.range + " · finishes " + allocation.finish,
       ].filter(Boolean);
 
       if (summary && summary.nowServing) {
