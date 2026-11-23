@@ -601,6 +601,8 @@
       queue: null,
       selected: null,
       summary: null,
+      profile: null,
+      identityLoading: false,
       queueTimer: null,
     },
     consult: {
@@ -711,10 +713,20 @@
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  function doctorName(session) {
-    const name = String(session && session.doctorName ? session.doctorName : "").trim();
-    if (!name) return "Doctor";
+  /** Build a single, role-correct display name from any doctor-shaped record. */
+  function doctorDisplayName(doctor) {
+    const first = String(doctor && doctor.firstName ? doctor.firstName : "").trim();
+    const last = String(doctor && doctor.lastName ? doctor.lastName : "").trim();
+    const direct = String(
+      doctor && doctor.doctorName ? doctor.doctorName : ""
+    ).trim();
+    const name = direct || [first, last].filter(Boolean).join(" ");
+    if (!name) return "";
     return /^dr\.?\s/i.test(name) ? name : "Dr. " + name;
+  }
+
+  function doctorName(session) {
+    return doctorDisplayName(session) || "Doctor";
   }
 
   function el(tag, className, text) {
@@ -1481,6 +1493,7 @@
     } else if (id === "profile") {
       void loadPatientProfile();
     } else if (id === "doctor") {
+      void loadDoctorIdentity();
       void loadDoctorConsole();
       if (!state.doctor.pollTimer) {
         state.doctor.pollTimer = setInterval(() => {
@@ -1511,6 +1524,7 @@
       loadOnce(loadManagerSessionPicker);
       loadOnce(loadManagerSessions);
     } else if (id === "welcome") {
+      void loadDoctorIdentity();
       loadOnce(loadPublicNotices);
     }
 
@@ -1540,12 +1554,13 @@
           ADMIN: "red",
         }[S.role]));
 
+        const displayName = S.displayName || S.email || "Signed in";
         const name = el(
           "span",
           "hidden max-w-[14rem] truncate sm:inline",
-          S.email || "Signed in"
+          displayName
         );
-        name.title = S.email || "";
+        name.title = S.email || displayName;
         container.append(name);
 
         if (S.role === "CUSTOMER") {
@@ -1584,6 +1599,17 @@
       registerLink.href = "#register";
 
       container.append(loginLink, registerLink);
+    });
+
+    const welcomeName = S && S.displayName ? S.displayName : "";
+    document.querySelectorAll("[data-welcome-identity]").forEach((node) => {
+      node.hidden = !welcomeName;
+      node.textContent = welcomeName ? "Welcome back, " + welcomeName : "";
+    });
+
+    document.querySelectorAll("[data-doctor-welcome]").forEach((node) => {
+      node.hidden = !welcomeName;
+      node.textContent = welcomeName ? "Welcome back, " + welcomeName : "";
     });
 
     document.querySelectorAll("[data-roles]").forEach((link) => {
@@ -1650,6 +1676,8 @@
     state.doctor.queue = null;
     state.doctor.selected = null;
     state.doctor.summary = null;
+    state.doctor.profile = null;
+    state.doctor.identityLoading = false;
     state.doctor.allAppointments = [];
     state.doctor.sessionAppointments = [];
 
@@ -1658,11 +1686,42 @@
       role: user.role,
       email: user.email || "Signed in",
       name: user.email || "Signed in",
+      displayName: user.displayName || user.doctorName || null,
     };
     if (state.notificationTimer) clearInterval(state.notificationTimer);
     subscribe("private-notifications", "/user/queue/notifications", handleIncomingNotification);
     state.notificationTimer = setInterval(loadNotifications, 15000);
     void loadNotifications();
+    void loadDoctorIdentity();
+  }
+
+  /**
+   * The session endpoint only carries id, email and role. Load the doctor's
+   * own profile so every dashboard greeting uses the name of the doctor who
+   * actually signed in, including accounts created by the administrator.
+   */
+  async function loadDoctorIdentity() {
+    if (!S || S.role !== "DOCTOR" || S.displayName) return;
+    if (state.doctor.identityLoading) return;
+
+    const userId = S.id;
+    state.doctor.identityLoading = true;
+    try {
+      const profile = await MC.doctorProfile();
+      if (!S || S.role !== "DOCTOR" || S.id !== userId) return;
+
+      const displayName = doctorDisplayName(profile);
+      if (!displayName) return;
+
+      state.doctor.profile = profile;
+      S.displayName = displayName;
+      S.doctorName = displayName;
+      render();
+    } catch {
+      // The email fallback remains visible if the profile is temporarily unavailable.
+    } finally {
+      state.doctor.identityLoading = false;
+    }
   }
 
   function handleSessionExpired() {

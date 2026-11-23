@@ -110,6 +110,14 @@ test("staff password reset posts the admin reset route", async () => {
   });
 });
 
+test("the signed-in doctor reads their own profile for the dashboard greeting", async () => {
+  const { MC, calls } = loadApi();
+  await MC.doctorProfile();
+
+  assert.equal(calls[0].url, "/api/backend/doctor/profile");
+  assert.equal(calls[0].settings.method, "GET");
+});
+
 test("doctor feedback uses the doctor's public reviews endpoint", async () => {
   const { MC, calls } = loadApi();
   await MC.doctorReviews("doctor-1");
