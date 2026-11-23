@@ -1577,6 +1577,30 @@
   // Account rendering
   // ---------------------------------------------------------------
 
+  /**
+   * The welcome hero CTA follows the visitor's state: guests discover the
+   * public roster, patients go straight to the booking dashboard, and staff
+   * return to their own dashboard.
+   */
+  function renderWelcomeCta() {
+    document.querySelectorAll("[data-welcome-cta]").forEach((link) => {
+      let label = "Find a doctor";
+      let target = "doctors";
+
+      if (S && S.role === "CUSTOMER") {
+        label = "Book a session";
+        target = "index";
+      } else if (S && HOME[S.role]) {
+        label = "Go to dashboard";
+        target = HOME[S.role];
+      }
+
+      link.href = "#" + target;
+      const text = link.querySelector("[data-welcome-cta-label]");
+      if (text) text.textContent = label;
+    });
+  }
+
   function render() {
     document.querySelectorAll("[data-who]").forEach((container) => {
       container.replaceChildren();
@@ -1646,6 +1670,8 @@
       node.hidden = !welcomeName;
       node.textContent = welcomeName ? "Welcome back, " + welcomeName : "";
     });
+
+    renderWelcomeCta();
 
     document.querySelectorAll("[data-roles]").forEach((link) => {
       const raw = link.getAttribute("data-roles") || link.dataset.roles || "*";
