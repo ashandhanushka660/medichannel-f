@@ -59,11 +59,22 @@ test("the consultation picker opens active rooms before closed transcripts", () 
   assert.match(APP, /priority\[a\.status\] \?\? 9/);
 });
 
-test("both roles have a visible control to open or refresh the room", () => {
+test("both roles have a visible refresh button in the consultation view", () => {
+  const consultIndex = HTML.indexOf('data-view="consult"');
+  const refreshIndex = HTML.indexOf("data-consult-refresh");
+  assert.ok(consultIndex >= 0 && refreshIndex > consultIndex);
+  assert.match(HTML, /data-consult-refresh[\s\S]{0,240}>Refresh</);
+  assert.match(APP, /async function refreshConsultationRoom/);
+  assert.match(APP, /querySelector\("\[data-consult-refresh\]"\)/);
+  assert.match(APP, /void refreshConsultationRoom\(\)/);
+  assert.match(APP, /button\.disabled = true/);
+  assert.match(APP, /await loadConsultationPicker\(\)/);
+  assert.doesNotMatch(APP, /chatActionButton\("Refresh consultation status"/);
+});
+
+test("doctors still get a start action beside the locked chat message", () => {
   assert.match(APP, /id = "consult-room-control"/);
   assert.match(APP, /chatActionButton\("Start consultation"/);
-  assert.match(APP, /chatActionButton\("Refresh consultation status"/);
-  assert.match(APP, /payload\.status === "IN_CONSULTATION"/);
 });
 
 test("booked and closed rooms never send unauthorised chat subscriptions", () => {
@@ -79,6 +90,6 @@ test("booked and closed rooms never send unauthorised chat subscriptions", () =>
 });
 
 test("browser cache is busted after asset changes", () => {
-  assert.match(HTML, /mediclinic-app(?:\.min)?\.js\?v=20261123g/);
-  assert.match(HTML, /mediclinic-api\.js\?v=20261123g/);
+  assert.match(HTML, /mediclinic-app(?:\.min)?\.js\?v=20261123h/);
+  assert.match(HTML, /mediclinic-api\.js\?v=20261123h/);
 });

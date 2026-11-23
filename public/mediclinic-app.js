@@ -5001,6 +5001,33 @@
     }
   }
 
+  /**
+   * Re-read the appointment list and reopen the current room. This gives both
+   * participants one visible refresh control even when the chat layout is
+   * empty, locked or already active.
+   */
+  async function refreshConsultationRoom() {
+    const button = document.querySelector("[data-consult-refresh]");
+    if (!button) return;
+
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = "Refreshing…";
+    const scrollY = window.scrollY;
+
+    if (state.consult.appointmentId) {
+      state.consult.requestedId = state.consult.appointmentId;
+    }
+
+    try {
+      await loadConsultationPicker();
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+      window.scrollTo({ top: scrollY, behavior: "instant" });
+    }
+  }
+
   async function openConsultation(appointmentId, knownList) {
     if (!appointmentId) return;
 
@@ -5313,18 +5340,11 @@
       actions.append(start);
     } else {
       actions.append(
-        chatActionButton("Refresh consultation status", async () => {
-          await refreshConsultationStatus(appointment.appointmentId);
-          const current =
-            String(state.consult.appointmentId) === String(appointment.appointmentId)
-              ? state.consult.appointment
-              : appointment;
-          if (current && current.status === "IN_CONSULTATION") {
-            await loadChatHistory(appointment.appointmentId);
-          } else {
-            renderConsultWaiting(current || appointment);
-          }
-        })
+        el(
+          "span",
+          "text-xs text-mute",
+          "Use Refresh above to check for updates."
+        )
       );
     }
     card.append(actions);
@@ -5448,18 +5468,11 @@
       );
     } else if (S.role === "CUSTOMER") {
       controls.append(
-        chatActionButton("Refresh consultation status", async () => {
-          await refreshConsultationStatus(appointment.appointmentId);
-          const current =
-            String(state.consult.appointmentId) === String(appointment.appointmentId)
-              ? state.consult.appointment
-              : appointment;
-          if (current && current.status === "IN_CONSULTATION") {
-            await loadChatHistory(appointment.appointmentId, { force: true });
-          } else {
-            renderConsultWaiting(current || appointment);
-          }
-        })
+        el(
+          "span",
+          "text-xs text-mute",
+          "Use Refresh above after your doctor starts the consultation."
+        )
       );
     }
   }
@@ -8866,6 +8879,13 @@
       event.preventDefault();
       state.sessionsLoaded = false;
       void loadSessions();
+    });
+  }
+
+  const consultRefresh = document.querySelector("[data-consult-refresh]");
+  if (consultRefresh) {
+    consultRefresh.addEventListener("click", () => {
+      void refreshConsultationRoom();
     });
   }
 
