@@ -242,18 +242,28 @@
       });
     },
 
-    cancelSession(sessionId) {
+    cancelSession(sessionId, reason) {
       return request("sessions/" + encodeURIComponent(sessionId) + "/cancel", {
         method: "PATCH",
-        body: {},
+        body: { reason },
       });
     },
 
     delaySession(sessionId, minutes) {
       return request("sessions/" + encodeURIComponent(sessionId) + "/delay", {
         method: "PATCH",
-        body: { delayMinutes: Number(minutes) || 15 },
+        body: { delayMinutes: Number(minutes) },
       });
+    },
+
+    delayAppointment(appointmentId, minutes) {
+      return request(
+        "appointments/" + encodeURIComponent(appointmentId) + "/delay",
+        {
+          method: "PATCH",
+          body: { delayMinutes: Number(minutes) },
+        }
+      );
     },
 
     // Notifications --------------------------------------------------
@@ -579,10 +589,10 @@
       );
     },
 
-    declineAppointment(appointmentId) {
+    declineAppointment(appointmentId, reason) {
       return request(
         "doctor/appointments/" + encodeURIComponent(appointmentId) + "/decline",
-        { method: "PATCH", body: {} }
+        { method: "PATCH", body: { reason } }
       );
     },
 

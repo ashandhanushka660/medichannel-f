@@ -21,14 +21,18 @@ function loadManagerUI() {
 
 const UI = loadManagerUI();
 
-test("the manager create-session form opens at the clinic start time", () => {
+test("the manager create-session form covers the published clinic day", () => {
   assert.match(
     HTML_SOURCE,
     /<input id="sess-start" type="time" value="07:00"[^>]*>/
   );
   assert.match(
     HTML_SOURCE,
-    /<input id="sess-end" type="time" value="12:00"[^>]*>/
+    /<input id="sess-end" type="time" value="16:00"[^>]*>/
+  );
+  assert.match(
+    HTML_SOURCE,
+    /<input id="sess-max" type="number" min="1" max="48" value="48"[^>]*>/
   );
 });
 

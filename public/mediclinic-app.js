@@ -49,8 +49,9 @@
   const CLINIC_END = "16:00";
   const CLINIC_HOURS = 8;
   const SLOT_MINUTES = 10;
+  const CLINIC_WINDOW_LABEL = CLINIC_START + "–" + CLINIC_END;
   const CLINIC_HOURS_LABEL =
-    CLINIC_START + "–" + CLINIC_END + " · " + SLOT_MINUTES + " min per patient";
+    CLINIC_WINDOW_LABEL + " · " + SLOT_MINUTES + " min per patient";
   const ManagerUI = window.MCManager;
   const prefersReducedMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
@@ -2031,7 +2032,7 @@
             sessions.length +
             (sessions.length === 1 ? " session on " : " sessions on ") +
             day +
-            (period ? " · " + period : "");
+            " · " + CLINIC_WINDOW_LABEL;
         }
       }
 
@@ -4064,13 +4065,14 @@
     }
   }
 
-  function confirmAppointmentCancel(appointmentId) {
+  function confirmAppointmentCancel(appointmentId, options = {}) {
     const notice = $("app-session-warning");
     if (!notice) return Promise.resolve(null);
 
     const appointment = (Array.isArray(state.appointments) ? state.appointments : [])
       .concat(Array.isArray(state.manager && state.manager.reception) ? state.manager.reception : [])
       .find((item) => item && String(item.appointmentId) === String(appointmentId));
+    const previousRole = notice.getAttribute("role");
 
     return new Promise((resolve) => {
       const overlay = el(
@@ -4088,17 +4090,18 @@
       const title = el(
         "h2",
         "text-base font-semibold text-ink",
-        "Cancel this appointment?"
+        options.title || "Cancel this appointment?"
       );
       const message = el(
         "p",
         "mt-1 text-sm text-mute",
-        appointment
-          ? "Booking " +
-              referenceOf(appointment.bookingReference) +
-              (appointment.doctorName ? " with " + doctorName(appointment) : "") +
-              ". Tell us why you are cancelling, then confirm or deny."
-          : "Tell us why you are cancelling, then confirm or deny."
+        options.message ||
+          (appointment
+            ? "Booking " +
+                referenceOf(appointment.bookingReference) +
+                (appointment.doctorName ? " with " + doctorName(appointment) : "") +
+                ". Tell us why you are cancelling, then confirm or deny."
+            : "Tell us why you are cancelling, then confirm or deny.")
       );
 
       const label = el(
@@ -4145,6 +4148,10 @@
         document.body.append(notice);
         notice.replaceChildren();
         notice.hidden = true;
+        if (previousRole) notice.setAttribute("role", previousRole);
+        else notice.removeAttribute("role");
+        notice.removeAttribute("aria-modal");
+        notice.removeAttribute("aria-labelledby");
         resolve(reason);
       };
 
@@ -4170,6 +4177,123 @@
     });
   }
 
+  /**
+   * Message box for the manager/doctor delay action. The user must type the
+   * number of minutes and press Confirm; there is no fixed 15-minute action.
+   */
+  function promptDelayMinutes(title = "Delay this session") {
+    const notice = $("app-session-warning");
+    if (!notice) return Promise.resolve(null);
+    const previousRole = notice.getAttribute("role");
+
+    return new Promise((resolve) => {
+      const overlay = el(
+        "div",
+        "fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4"
+      );
+      document.body.append(overlay);
+      overlay.append(notice);
+
+      notice.hidden = false;
+      notice.className =
+        "w-full max-w-md rounded-xl border border-line bg-white p-5 text-ink shadow-xl";
+      notice.setAttribute("role", "dialog");
+      notice.setAttribute("aria-modal", "true");
+      notice.setAttribute("aria-labelledby", "delay-minutes-title");
+      notice.replaceChildren();
+
+      const heading = el(
+        "h2",
+        "text-base font-semibold text-ink",
+        title
+      );
+      heading.id = "delay-minutes-title";
+
+      const message = el(
+        "p",
+        "mt-1 text-sm text-mute",
+        "Enter the custom delay in minutes. Every patient in this queue from the delayed booking onwards is notified."
+      );
+
+      const label = el(
+        "label",
+        "mt-4 block text-xs font-semibold text-slate2",
+        "Delay (minutes)"
+      );
+      label.htmlFor = "delay-minutes";
+
+      const input = document.createElement("input");
+      input.id = "delay-minutes";
+      input.dataset.delayMinutes = "";
+      input.type = "number";
+      input.min = "1";
+      input.max = "480";
+      input.step = "1";
+      input.value = "10";
+      input.className =
+        "mt-1 w-full px-3 py-2 text-sm border border-line rounded-lg bg-white text-ink focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
+
+      const error = el(
+        "p",
+        "mt-1 text-xs text-rose-600",
+        "Enter a whole number of minutes between 1 and 480."
+      );
+      error.hidden = true;
+
+      const actions = el("div", "mt-5 flex flex-wrap justify-end gap-2");
+      const cancel = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow min-h-9 px-3 py-1.5 text-xs",
+        "Cancel"
+      );
+      cancel.type = "button";
+      const confirm = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-9 px-3 py-1.5 text-xs",
+        "Confirm delay"
+      );
+      confirm.type = "button";
+
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        overlay.remove();
+        document.body.append(notice);
+        notice.replaceChildren();
+        notice.hidden = true;
+        if (previousRole) notice.setAttribute("role", previousRole);
+        else notice.removeAttribute("role");
+        notice.removeAttribute("aria-modal");
+        notice.removeAttribute("aria-labelledby");
+        resolve(value);
+      };
+
+      cancel.addEventListener("click", () => finish(null));
+      confirm.addEventListener("click", () => {
+        const raw = input.value.trim();
+        const minutes = Number(raw);
+        if (
+          !Number.isInteger(minutes) ||
+          minutes < 1 ||
+          minutes > 480
+        ) {
+          error.hidden = false;
+          input.focus();
+          return;
+        }
+        finish(minutes);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") confirm.click();
+      });
+
+      actions.append(cancel, confirm);
+      notice.append(heading, message, label, input, error, actions);
+      setTimeout(() => input.focus(), 0);
+    });
+  }
+
   async function cancelAppointment(appointmentId) {
     const reason = await confirmAppointmentCancel(appointmentId);
     if (!reason) return;
@@ -4186,6 +4310,28 @@
       );
     } catch (error) {
       setAppMessage(error.message, "error");
+    }
+  }
+
+  async function delayAppointmentQueue(appointmentId, button) {
+    const minutes = await promptDelayMinutes("Delay this queue position");
+    if (minutes == null) return;
+    if (button) button.disabled = true;
+
+    try {
+      await MC.delayAppointment(appointmentId, minutes);
+      showNotificationToast({
+        title: "Queue delayed",
+        message:
+          "This booking and every appointment behind it were delayed by " +
+          minutes +
+          " minute(s).",
+      });
+      await Promise.allSettled([loadManagerReception({ silent: true }), loadSessions()]);
+      invalidateManagerDashboard();
+    } catch (error) {
+      setAppMessage(error.message, "error");
+      if (button) button.disabled = false;
     }
   }
 
@@ -4961,11 +5107,16 @@
         await loadDoctorQueue(state.doctor.sessionId);
         return;
       } else if (name === "decline") {
-        if (!window.confirm("Decline this appointment?")) {
+        const reason = await confirmAppointmentCancel(appointmentId, {
+          title: "Decline this appointment?",
+          message:
+            "A reason is required. The patient will be notified and the appointment remains in hospital records.",
+        });
+        if (!reason) {
           if (button) button.disabled = false;
           return;
         }
-        await MC.declineAppointment(appointmentId);
+        await MC.declineAppointment(appointmentId, reason);
         setStatus(statusNode, "Appointment declined.");
         await loadDoctorQueue(state.doctor.sessionId);
         return;
@@ -7568,7 +7719,7 @@
           <td data-label="Actions">
             <div class="flex items-center gap-1.5 justify-end">
               ${canCancel ? `
-                <button type="button" data-delay-session="${escapeHtml(sessionId)}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-line text-amber-700 hover:bg-amber-50 px-2 py-1 text-xs" title="Delay session by 15 mins">⏱ +15m</button>
+                <button type="button" data-delay-session="${escapeHtml(sessionId)}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-line text-amber-700 hover:bg-amber-50 px-2 py-1 text-xs" title="Enter a custom delay in minutes">⏱ Delay</button>
                 <button type="button" data-cancel-session="${escapeHtml(sessionId)}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-600 hover:bg-rose-50 px-2 py-1 text-xs" title="Cancel session">Cancel</button>
               ` : '<span class="text-xs text-mute">—</span>'}
             </div>
@@ -8691,6 +8842,10 @@
       const reference = referenceOf(appointment.bookingReference);
       const status = appointment.status || "BOOKED";
       const canCancel = status === "BOOKED" || status === "ARRIVED";
+      const canDelay =
+        status === "BOOKED" ||
+        status === "ARRIVED" ||
+        status === "IN_CONSULTATION";
 
       const tdRef = el("td", "text-xs font-mono text-slate2", reference);
       tdRef.dataset.label = "Ref";
@@ -8745,6 +8900,18 @@
         pay.type = "button";
         pay.dataset.payAppointment = appointment.appointmentId;
         actions.append(pay);
+      }
+
+      if (canDelay) {
+        const delay = el(
+          "button",
+          "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+          "Delay queue"
+        );
+        delay.type = "button";
+        delay.dataset.delayAppointment = appointment.appointmentId;
+        delay.title = "Delay this booking and everyone behind it";
+        actions.append(delay);
       }
 
       if (canCancel) {
@@ -9319,12 +9486,17 @@
     if (delaySessionBtn) {
       const sessionId = delaySessionBtn.getAttribute("data-delay-session");
       if (sessionId) {
+        const minutes = await promptDelayMinutes("Delay this session");
+        if (minutes == null) return;
         delaySessionBtn.disabled = true;
         try {
-          await MC.delaySession(sessionId, 15);
+          await MC.delaySession(sessionId, minutes);
           showNotificationToast({
             title: "Session delayed",
-            message: "Session delayed by 15 minutes. Booked patients notified.",
+            message:
+              "Session delayed by " +
+              minutes +
+              " minute(s). Booked patients notified.",
           });
           invalidateManagerDashboard();
           await loadManagerSessions();
@@ -9343,12 +9515,15 @@
     if (cancelSessionBtn) {
       const sessionId = cancelSessionBtn.getAttribute("data-cancel-session");
       if (sessionId) {
-        if (!confirm("Are you sure you want to cancel this session? Booked patients will be notified.")) {
-          return;
-        }
+        const reason = await confirmAppointmentCancel(sessionId, {
+          title: "Cancel this session?",
+          message:
+            "A reason is required. Every booked patient will be notified and their appointment history is preserved.",
+        });
+        if (!reason) return;
         cancelSessionBtn.disabled = true;
         try {
-          await MC.cancelSession(sessionId);
+          await MC.cancelSession(sessionId, reason);
           showNotificationToast({
             title: "Session cancelled",
             message: "Session cancelled. Booked patients notified.",
@@ -9516,6 +9691,15 @@
     const checkin = event.target.closest("[data-checkin-appointment]");
     if (checkin) {
       void checkInAppointment(checkin.dataset.checkinAppointment);
+      return;
+    }
+
+    const delayAppointment = event.target.closest("[data-delay-appointment]");
+    if (delayAppointment) {
+      void delayAppointmentQueue(
+        delayAppointment.dataset.delayAppointment,
+        delayAppointment
+      );
       return;
     }
 
