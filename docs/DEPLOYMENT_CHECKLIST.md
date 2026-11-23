@@ -78,6 +78,9 @@ Both repositories deploy from their `main` branch.
 - `X-Frame-Options: DENY`, `COOP: same-origin`
 - No secrets in source or Git history
 - Audit logs and `/topic/audit-logs` are ADMIN-only
+- `audit_logs` is append-only: UPDATE/DELETE/TRUNCATE are blocked by database triggers
+- Audit responses expose `userId` and `appointmentId`, never email or medical content
+- Optional `AUDIT_TRUSTED_PROXIES` lists peers allowed to supply `X-Forwarded-For`
 - Public ratings show only APPROVED reviews
 
 ## Post-deploy verification
