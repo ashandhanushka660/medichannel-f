@@ -30,8 +30,11 @@ export default function DoctorSearch() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiRequest<DoctorResponse[]>("doctors")
-      .then((rows) =>
+    const controller = new AbortController();
+
+    apiRequest<DoctorResponse[]>("doctors", { signal: controller.signal })
+      .then((rows) => {
+        if (controller.signal.aborted) return;
         setDoctors(
           rows.map((doctor) => ({
             id: doctor.doctorId,
@@ -42,12 +45,17 @@ export default function DoctorSearch() {
             bio: doctor.biography,
             available: doctor.available,
           }))
-        )
-      )
-      .catch((cause: unknown) =>
-        setError(cause instanceof Error ? cause.message : "Could not load doctors.")
-      )
-      .finally(() => setLoading(false));
+        );
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : "Could not load doctors.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
   }, []);
 
   const filtered = doctors.filter((doctor) =>

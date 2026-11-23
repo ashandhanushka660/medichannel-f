@@ -60,7 +60,7 @@ export default function Workspace({
         const data = await response.json();
         if (!response.ok) {
           if (response.status === 401) {
-            router.replace("/login");
+            if (active) router.replace("/login");
             return;
           }
           throw new Error(data.message || "Unable to verify your session.");
@@ -83,7 +83,7 @@ export default function Workspace({
             manager: "/manager/dashboard",
             admin: "/admin/dashboard",
           };
-          router.replace(destinations[resolvedRole]);
+          if (active) router.replace(destinations[resolvedRole]);
           return;
         }
         if (active) setSessionRole(resolvedRole);

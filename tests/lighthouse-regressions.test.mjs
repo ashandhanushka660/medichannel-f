@@ -38,7 +38,7 @@ test("public notices space is reserved before JavaScript inserts notices", () =>
 
   const enterView = APP.slice(APP.indexOf("function enterView"), APP.indexOf("// Account rendering"));
   assert.equal(
-    (enterView.match(/void loadPublicNotices\(\);/g) || []).length,
+    (enterView.match(/loadOnce\(loadPublicNotices\);/g) || []).length,
     1,
     "welcome notices must be loaded exactly once per view entry"
   );
@@ -53,4 +53,20 @@ test("versioned static assets are cache-busted together", () => {
   const versions = [...HTML.matchAll(/\?v=(2026\d{4}[a-z])/g)].map((match) => match[1]);
   assert.ok(versions.length >= 4, "expected versioned static assets");
   assert.equal(new Set(versions).size, 1, "all static assets should share one version");
+});
+
+test("the LCP hero is a cacheable external image with intrinsic dimensions", () => {
+  assert.doesNotMatch(HTML, /<img src="data:image\/jpeg;base64,/);
+  assert.match(
+    HTML,
+    /src="\/images\/hero-doctor-1000\.jpg\?v=[\da-z]+"[^>]*width="1000" height="830" fetchpriority="high"/
+  );
+  assert.match(HTML, /og:image" content="https:\/\/app\.medichannel\.dpdns\.org\/images\/hero-doctor-1000\.jpg"/);
+});
+
+test("repeated view loaders are in-flight guarded", () => {
+  assert.match(APP, /const activeLoaders = new Set\(\)/);
+  assert.match(APP, /function loadOnce\(loader\)/);
+  assert.doesNotMatch(APP, /void load(?:StaffAccounts|AdminStats|AuditLogs|ManagerSessions)\(\);/);
+  assert.match(APP, /if \(\["welcome", "index"\]\.includes\(id\)\)/);
 });

@@ -9,12 +9,12 @@ const SOURCE = readFileSync(
 
 test("manager dashboard loads specialisations for the create-account form", () => {
   const managerBranch = SOURCE.match(
-    /id === "manager"\) \{([\s\S]{0,400}?)void loadManagerSessions\(\);/
+    /id === "manager"\) \{([\s\S]{0,400}?)loadOnce\(loadManagerSessions\);/
   );
   assert.ok(managerBranch, "manager navigation branch was not found");
   assert.match(
     managerBranch[1],
-    /void loadAdminSpecialisations\(\);/,
+    /loadOnce\(loadAdminSpecialisations\);/,
     "manager view must populate the specialisation dropdown"
   );
 });

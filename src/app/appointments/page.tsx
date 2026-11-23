@@ -53,28 +53,34 @@ export default function AppointmentsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  const fetchAppData = useCallback(
+    (signal?: AbortSignal) =>
+      Promise.all([
+        apiRequest<Appointment[]>("appointments/me", { signal }),
+        apiRequest<Session[]>("sessions", { signal }),
+      ]),
+    []
+  );
+
   const loadData = useCallback(async () => {
     setError("");
     try {
-      const [appointmentRows, sessionRows] = await Promise.all([
-        apiRequest<Appointment[]>("appointments/me"),
-        apiRequest<Session[]>("sessions"),
-      ]);
+      const [appointmentRows, sessionRows] = await fetchAppData();
       setAppointments(appointmentRows);
       setSessions(sessionRows);
+      setToday(new Date().toISOString().slice(0, 10));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load appointments.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchAppData]);
 
   useEffect(() => {
+    const controller = new AbortController();
     let active = true;
-    Promise.all([
-      apiRequest<Appointment[]>("appointments/me"),
-      apiRequest<Session[]>("sessions"),
-    ])
+
+    fetchAppData(controller.signal)
       .then(([appointmentRows, sessionRows]) => {
         if (!active) return;
         setAppointments(appointmentRows);
@@ -82,11 +88,8 @@ export default function AppointmentsPage() {
         setToday(new Date().toISOString().slice(0, 10));
       })
       .catch((cause: unknown) => {
-        if (active) {
-          setError(
-            cause instanceof Error ? cause.message : "Unable to load appointments."
-          );
-        }
+        if (!active) return;
+        setError(cause instanceof Error ? cause.message : "Unable to load appointments.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -94,8 +97,9 @@ export default function AppointmentsPage() {
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, []);
+  }, [fetchAppData]);
 
   const availableSessions = useMemo(() => {
     if (!today) return [];

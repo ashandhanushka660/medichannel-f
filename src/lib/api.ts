@@ -22,11 +22,19 @@ export async function apiRequest<T>(
     requestHeaders.set("Content-Type", "application/json");
   }
 
+  const signal =
+    options.signal ??
+    (typeof AbortSignal !== "undefined" &&
+    typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(25_000)
+      : undefined);
+
   const response = await fetch(`/api/backend/${endpoint.replace(/^\/+/, "")}`, {
     ...options,
     credentials: "same-origin",
     headers: requestHeaders,
     cache: "no-store",
+    signal,
   });
 
   if (!response.ok) {

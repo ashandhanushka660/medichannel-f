@@ -22,6 +22,7 @@ function loadApi(options = {}) {
     Headers,
     FormData,
     URLSearchParams,
+    AbortSignal,
     JSON,
     console,
     navigator: { onLine: options.online ?? true },
@@ -320,4 +321,36 @@ test("me() parses JSON and reuses the shared error mapping", async () => {
       return true;
     }
   );
+});
+
+test("requests carry a timeout signal without changing the public contract", async () => {
+  const { MC, calls } = loadApi();
+  await MC.specialisations();
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].settings.signal instanceof AbortSignal);
+});
+
+test("simultaneous identical reads share one in-flight request", async () => {
+  const { MC, calls } = loadApi();
+  const [first, second] = await Promise.all([
+    MC.sessions(),
+    MC.sessions(),
+  ]);
+
+  assert.deepEqual(first, second);
+  assert.equal(calls.length, 1);
+
+  // The dedupe cache is only for in-flight work; later reads are fresh.
+  await MC.sessions();
+  assert.equal(calls.length, 2);
+});
+
+test("me() also dedupes concurrent session checks", async () => {
+  const { MC, calls } = loadApi({ fetchImpl: () => jsonResponse(200, { role: "DOCTOR" }) });
+  const [first, second] = await Promise.all([MC.me(), MC.me()]);
+
+  assert.deepEqual(first, { role: "DOCTOR" });
+  assert.deepEqual(second, { role: "DOCTOR" });
+  assert.equal(calls.length, 1);
 });

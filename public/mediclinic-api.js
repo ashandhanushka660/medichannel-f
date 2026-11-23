@@ -59,7 +59,60 @@
     );
   }
 
-  async function request(path, options) {
+  const DEFAULT_TIMEOUT_MS = 25_000;
+  const inFlight = new Map();
+
+  function requestSignal(settings) {
+    if (settings.signal) return settings.signal;
+    if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+      return AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+    }
+    return undefined;
+  }
+
+  // Collapse simultaneous identical reads. The cache lives only for the
+  // lifetime of the request, so fresh data is never served from memory.
+  function dedupe(key, task) {
+    if (!key) return task();
+    const pending = inFlight.get(key);
+    if (pending) return pending;
+
+    const promise = Promise.resolve()
+      .then(task)
+      .finally(() => {
+        if (inFlight.get(key) === promise) inFlight.delete(key);
+      });
+    inFlight.set(key, promise);
+    return promise;
+  }
+
+  async function performRequest(url, settings) {
+    let response;
+
+    try {
+      response = await fetch(url, settings);
+    } catch (cause) {
+      const offline = new MediChannelError(
+        navigator.onLine
+          ? "Unable to reach the hospital service. Check your connection."
+          : "You appear to be offline. Reconnect and try again.",
+        0,
+        null
+      );
+      offline.cause = cause;
+      throw offline;
+    }
+
+    const body = await readBody(response);
+
+    if (!response.ok) {
+      throw errorFromResponse(response, body);
+    }
+
+    return body;
+  }
+
+  function request(path, options) {
     const settings = Object.assign(
       { method: "GET", credentials: "same-origin", cache: "no-store" },
       options || {}
@@ -82,33 +135,18 @@
     }
 
     settings.headers = headers;
+    const callerSignal = settings.signal;
+    const signal = requestSignal(settings);
+    if (signal) settings.signal = signal;
 
-    let response;
+    const url = "/api/backend/" + String(path).replace(/^\/+/, "");
+    const method = String(settings.method || "GET").toUpperCase();
+    const key =
+      !callerSignal && (method === "GET" || method === "HEAD")
+        ? method + " " + url
+        : null;
 
-    try {
-      response = await fetch(
-        "/api/backend/" + String(path).replace(/^\/+/, ""),
-        settings
-      );
-    } catch (cause) {
-      const offline = new MediChannelError(
-        navigator.onLine
-          ? "Unable to reach the hospital service. Check your connection."
-          : "You appear to be offline. Reconnect and try again.",
-        0,
-        null
-      );
-      offline.cause = cause;
-      throw offline;
-    }
-
-    const body = await readBody(response);
-
-    if (!response.ok) {
-      throw errorFromResponse(response, body);
-    }
-
-    return body;
+    return dedupe(key, () => performRequest(url, settings));
   }
 
   function query(params) {
@@ -131,28 +169,34 @@
     request,
 
     // Authentication -------------------------------------------------
-    async me() {
+    me() {
       // The session route lives outside the BFF prefix.
       const headers = {};
       const tabToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("mc_tab_token") : null;
       if (tabToken) {
         headers["Authorization"] = "Bearer " + tabToken;
       }
-      const response = await fetch("/api/auth/me", {
+      const settings = {
         headers,
         credentials: "same-origin",
         cache: "no-store",
+      };
+      const signal = requestSignal(settings);
+      if (signal) settings.signal = signal;
+
+      return dedupe("GET /api/auth/me", async () => {
+        const response = await fetch("/api/auth/me", settings);
+
+        if (response.status === 401) return null;
+
+        const body = await readBody(response);
+
+        if (!response.ok) {
+          throw errorFromResponse(response, body);
+        }
+
+        return body;
       });
-
-      if (response.status === 401) return null;
-
-      const body = await readBody(response);
-
-      if (!response.ok) {
-        throw errorFromResponse(response, body);
-      }
-
-      return body;
     },
 
     wsTicket() {

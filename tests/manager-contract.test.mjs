@@ -83,7 +83,7 @@ test("reset password dialog validates and posts through the staff API", () => {
   assert.match(APP, /ManagerUI\.lockAction\(submit\)/);
   assert.match(APP, /MC\.resetStaffPassword\(/);
   assert.match(APP, /Password reset for /);
-  assert.match(APP, /void loadAuditLogs\(\)/);
+  assert.match(APP, /loadOnce\(loadAuditLogs\)/);
   assert.match(API, /resetStaffPassword\(userId, payload\)/);
   assert.match(API, /\/reset-password"/);
 });

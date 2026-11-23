@@ -13,6 +13,19 @@
   }
 
   const $ = (id) => document.getElementById(id);
+
+  const fetchWithTimeout = (url, options, timeoutMs = 25_000) => {
+    const settings = Object.assign({}, options || {});
+    if (
+      !settings.signal &&
+      typeof AbortSignal !== "undefined" &&
+      typeof AbortSignal.timeout === "function"
+    ) {
+      settings.signal = AbortSignal.timeout(timeoutMs);
+    }
+    return fetch(url, settings);
+  };
+
   const views = Array.from(document.querySelectorAll("[data-view]"));
   const TZ = "Asia/Colombo";
   const ManagerUI = window.MCManager;
@@ -775,7 +788,7 @@
         );
 
         try {
-          const response = await fetch("/api/backend/wake", {
+          const response = await fetchWithTimeout("/api/backend/wake", {
             credentials: "same-origin",
             cache: "no-store",
           });
@@ -972,40 +985,40 @@
     }
 
     if (link.hash === "#doctor-n") {
-      void loadDoctorNotesPicker();
+      loadOnce(loadDoctorNotesPicker);
     }
 
     if (link.hash === "#admin-u" || link.hash === "#manager-u" || link.hash === "#admin" || link.hash === "#manager") {
-      void loadStaffAccounts();
+      loadOnce(loadStaffAccounts);
     }
 
     if (link.hash === "#admin-d" || link.hash === "#admin") {
-      void loadAdminStats();
+      loadOnce(loadAdminStats);
     }
 
     if (link.hash === "#manager-x" || link.hash === "#admin") {
-      void loadAuditLogs();
+      loadOnce(loadAuditLogs);
     }
 
     if (link.hash === "#admin-r" || link.hash === "#admin") {
-      void loadAdminRooms();
+      loadOnce(loadAdminRooms);
     }
 
     if (link.hash === "#manager-s" || link.hash === "#manager-d" || link.hash === "#manager") {
-      void loadManagerSessionPicker();
-      void loadManagerSessions();
+      loadOnce(loadManagerSessionPicker);
+      loadOnce(loadManagerSessions);
     }
 
     if (link.hash === "#manager-r" || link.hash === "#manager") {
-      void loadManagerReception();
+      loadOnce(loadManagerReception);
     }
 
     if (link.hash === "#manager-x") {
-      void loadManagerReviews();
+      loadOnce(loadManagerReviews);
     }
 
     if (link.hash === "#manager-n" || link.hash === "#manager") {
-      void loadManagerNotices();
+      loadOnce(loadManagerNotices);
     }
   }
 
@@ -1059,41 +1072,54 @@
     });
 
     if (active.id === "doctor-n") {
-      void loadDoctorNotesPicker();
+      loadOnce(loadDoctorNotesPicker);
     }
 
     if (active.id === "admin-u" || active.id === "manager-u") {
-      void loadStaffAccounts();
+      loadOnce(loadStaffAccounts);
     }
 
     if (active.id === "admin-d" || active.id === "admin") {
-      void loadAdminStats();
+      loadOnce(loadAdminStats);
     }
 
     if (active.id === "admin-a" || active.id === "admin") {
-      void loadAuditLogs();
+      loadOnce(loadAuditLogs);
     }
 
     if (active.id === "admin-r" || active.id === "admin") {
-      void loadAdminRooms();
+      loadOnce(loadAdminRooms);
     }
 
     if (active.id === "manager-s" || active.id === "manager-d") {
-      void loadManagerSessionPicker();
-      void loadManagerSessions();
+      loadOnce(loadManagerSessionPicker);
+      loadOnce(loadManagerSessions);
     }
 
     if (active.id === "manager-r" || active.id === "manager") {
-      void loadManagerReception();
+      loadOnce(loadManagerReception);
     }
 
     if (active.id === "manager-x") {
-      void loadManagerReviews();
+      loadOnce(loadManagerReviews);
     }
 
     if (active.id === "manager-n" || active.id === "manager") {
-      void loadManagerNotices();
+      loadOnce(loadManagerNotices);
     }
+  }
+
+  // Panel setup and view entry can request the same dataset in one tick.
+  // Keep a short-lived in-flight guard so each loader runs once per burst.
+  const activeLoaders = new Set();
+  function loadOnce(loader) {
+    const key = loader.name || String(loader);
+    if (activeLoaders.has(key)) return;
+    activeLoaders.add(key);
+    Promise.resolve()
+      .then(loader)
+      .catch((error) => console.warn("Loader failed:", key, error))
+      .finally(() => activeLoaders.delete(key));
   }
 
   let welcomeEntrancePlayed = false;
@@ -1332,29 +1358,30 @@
     } else if (id === "consult") {
       void loadConsultationPicker();
     } else if (id === "admin") {
-      void loadAdminSpecialisations();
-      void loadStaffAccounts();
-      void loadAdminRooms();
-      void loadAdminStats();
-      void loadAuditLogs();
+      loadOnce(loadAdminSpecialisations);
+      loadOnce(loadStaffAccounts);
+      loadOnce(loadAdminRooms);
+      loadOnce(loadAdminStats);
+      loadOnce(loadAuditLogs);
       subscribeAdminAuditLogs();
       if (!state.auditLogTimer) {
         state.auditLogTimer = setInterval(() => {
-          if (activeView === "admin") void loadAuditLogs();
+          if (activeView === "admin") loadOnce(loadAuditLogs);
         }, 6000);
       }
     } else if (id === "manager") {
       ensureManagerNoticesPanel();
-      void loadAdminSpecialisations();
-      void loadManagerNotices();
-      void loadStaffAccounts();
-      void loadManagerSessionPicker();
-      void loadManagerSessions();
+      loadOnce(loadAdminSpecialisations);
+      loadOnce(loadManagerNotices);
+      loadOnce(loadStaffAccounts);
+      loadOnce(loadManagerSessionPicker);
+      loadOnce(loadManagerSessions);
     } else if (id === "welcome") {
-      void loadPublicNotices();
+      loadOnce(loadPublicNotices);
     }
 
-    if (["welcome", "index", "appointments"].includes(id)) {
+    // loadAppointments() already refreshes the queue with the fresh list.
+    if (["welcome", "index"].includes(id)) {
       if (S && S.role === "CUSTOMER") {
         void refreshPatientQueue();
       } else {
@@ -3390,7 +3417,7 @@
     if (stompReady) return stompReady;
 
     stompReady = (async () => {
-      const response = await fetch("/api/realtime/config", {
+      const response = await fetchWithTimeout("/api/realtime/config", {
         credentials: "same-origin",
         cache: "no-store",
       });
@@ -3634,7 +3661,7 @@
       if (empty) empty.hidden = true;
 
       await loadDoctorQueue(chosenSessionId);
-      void loadDoctorNotesPicker();
+      loadOnce(loadDoctorNotesPicker);
     } catch (error) {
       if (error.status === 401) {
         handleSessionExpired();
@@ -5597,7 +5624,7 @@
     }
 
     setStatus(form.querySelector("[data-edit-status]"), "");
-    void loadAdminSpecialisations();
+    loadOnce(loadAdminSpecialisations);
     dialog.showModal();
   }
 
@@ -5830,9 +5857,9 @@
       );
       form.reset();
       syncCreateFormRole(form);
-      void loadStaffAccounts();
-      void loadAdminStats();
-      void loadAuditLogs();
+      loadOnce(loadStaffAccounts);
+      loadOnce(loadAdminStats);
+      loadOnce(loadAuditLogs);
     } catch (error) {
       setStatus(status, error.message || "Unable to create the account.", true);
     } finally {
@@ -5909,8 +5936,8 @@
         "Consultation room " + (created.roomNumber || payload.roomNumber) + " created successfully!"
       );
       form.reset();
-      void loadAdminRooms();
-      void loadManagerSessionPicker();
+      loadOnce(loadAdminRooms);
+      loadOnce(loadManagerSessionPicker);
     } catch (error) {
       setStatus(status, error.message || "Unable to create room.", true);
     } finally {
@@ -7353,10 +7380,10 @@
       });
 
       invalidateManagerDashboard();
-      void loadManagerSessions();
+      loadOnce(loadManagerSessions);
       state.sessionsLoaded = false;
       void loadSessions();
-      void loadAuditLogs();
+      loadOnce(loadAuditLogs);
     } catch (err) {
       setStatus(status, err.message || "Failed to create session.", true);
     } finally {
@@ -7495,7 +7522,7 @@
     if (button) button.disabled = true;
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetchWithTimeout("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -7568,7 +7595,7 @@
     if (button) button.disabled = true;
 
     try {
-      const response = await fetch("/api/auth/register", {
+      const response = await fetchWithTimeout("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -7628,7 +7655,7 @@
     if (button) button.disabled = true;
 
     try {
-      await fetch("/api/auth/logout", {
+      await fetchWithTimeout("/api/auth/logout", {
         method: "POST",
         credentials: "same-origin",
       });
@@ -7791,7 +7818,7 @@
           await loadManagerSessions();
           state.sessionsLoaded = false;
           void loadSessions();
-          void loadAuditLogs();
+          loadOnce(loadAuditLogs);
         } catch (err) {
           setAppMessage(err.message || "Failed to delay session.");
           delaySessionBtn.disabled = false;
@@ -7818,7 +7845,7 @@
           await loadManagerSessions();
           state.sessionsLoaded = false;
           void loadSessions();
-          void loadAuditLogs();
+          loadOnce(loadAuditLogs);
         } catch (err) {
           setAppMessage(err.message || "Failed to cancel session.");
           cancelSessionBtn.disabled = false;
@@ -8232,8 +8259,8 @@
         const dialog = $("edit-account-dialog");
         if (dialog) dialog.close();
         await loadStaffAccounts();
-        void loadAdminStats();
-        void loadAuditLogs();
+        loadOnce(loadAdminStats);
+        loadOnce(loadAuditLogs);
       } catch (error) {
         setStatus(status, error.message || "Unable to save the account.", true);
       } finally {
@@ -8279,8 +8306,8 @@
         const dialog = $("delete-account-dialog");
         if (dialog) dialog.close();
         await loadStaffAccounts();
-        void loadAdminStats();
-        void loadAuditLogs();
+        loadOnce(loadAdminStats);
+        loadOnce(loadAuditLogs);
       } catch (error) {
         setStatus(status, error.message || "Unable to delete the account.", true);
         if (deleteSubmit) deleteSubmit.disabled = false;
@@ -8344,7 +8371,7 @@
           "success"
         );
         await loadStaffAccounts();
-        void loadAuditLogs();
+        loadOnce(loadAuditLogs);
       } catch (error) {
         setStatus(
           status,
