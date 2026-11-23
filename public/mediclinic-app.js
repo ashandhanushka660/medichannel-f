@@ -588,6 +588,7 @@
     appointmentsLoaded: false,
     profile: null,
     myReviews: [],
+    submittedFeedbackIds: new Set(),
     pendingIntent: null,
     publicNoticesLoaded: false,
     publicNotices: [],
@@ -1619,6 +1620,8 @@
       state.notificationTimer = null;
       state.notifications = [];
       state.syncedSummaryNotifications.clear();
+      state.myReviews = [];
+      state.submittedFeedbackIds.clear();
       renderNotificationBadge(0);
       return;
     }
@@ -1636,6 +1639,8 @@
     state.consult.summary = null;
     state.consult.list = [];
     state.syncedSummaryNotifications.clear();
+    state.myReviews = [];
+    state.submittedFeedbackIds.clear();
 
     S = {
       id: user.id || user.userId || null,
@@ -1658,6 +1663,7 @@
     if (state.notificationTimer) clearInterval(state.notificationTimer);
     state.notificationTimer = null;
     state.syncedSummaryNotifications.clear();
+    state.submittedFeedbackIds.clear();
     disconnectRealtime();
     render();
     hideQueue();
@@ -5870,7 +5876,6 @@
     const followup = document.querySelector("[data-summary-followup]");
     const date = document.querySelector("[data-summary-date]");
     const feedback = document.querySelector("[data-feedback-form]");
-    const line = document.querySelector("[data-consult-summary-line]");
 
     const appointment = state.consult.appointment;
 
@@ -5879,12 +5884,7 @@
         appointment.status === "COMPLETED");
     }
 
-    if (line) {
-      line.textContent =
-        appointment && appointment.status === "COMPLETED"
-          ? "Consultation completed. You can read the summary and leave feedback."
-          : "Visible to you after the doctor completes the consultation.";
-    }
+    updateConsultSummaryLine(Boolean(state.consult.summary));
 
     try {
       const record = await MC.summary(appointmentId);
@@ -5897,6 +5897,7 @@
             "The summary appears here after the doctor completes the consultation.";
         }
         updateDoctorConsultSummaryBox(null);
+        updateConsultSummaryLine(false);
         return;
       }
 
@@ -5904,9 +5905,7 @@
 
       if (empty) empty.hidden = true;
       if (summary) summary.hidden = false;
-      if (line) {
-        line.textContent = "Consultation completed. Clinical summary and prescription are published above.";
-      }
+      updateConsultSummaryLine(true);
       if (symptoms) symptoms.textContent = record.symptoms || "Not recorded";
       if (diagnosis) diagnosis.textContent = record.diagnosis || "—";
       if (prescription) {
@@ -5947,6 +5946,7 @@
           : (error.message || "Something went wrong. Please try again.");
       }
       updateDoctorConsultSummaryBox(null);
+      updateConsultSummaryLine(false);
     }
   }
 
@@ -6073,14 +6073,105 @@
     if (rating) rating.disabled = false;
     if (comment) comment.disabled = false;
     setStatus(document.querySelector("[data-feedback-status]"), "");
+    renderFeedbackRecord(
+      findMyReview(state.consult.appointment && state.consult.appointment.appointmentId)
+    );
+    updateConsultSummaryLine(Boolean(state.consult.summary));
   }
 
-  function markFeedbackSubmitted(message) {
+  function findMyReview(appointmentId) {
+    if (!appointmentId) return null;
+    return (
+      (state.myReviews || []).find(
+        (review) =>
+          review &&
+          String(review.appointmentId) === String(appointmentId)
+      ) || null
+    );
+  }
+
+  function hasSubmittedFeedback(appointmentId) {
+    return Boolean(
+      appointmentId &&
+        (state.submittedFeedbackIds.has(String(appointmentId)) ||
+          findMyReview(appointmentId))
+    );
+  }
+
+  function renderFeedbackRecord(review) {
+    const card = document.querySelector("[data-feedback-record]");
+    if (!card) return;
+
+    if (!review) {
+      card.hidden = true;
+      return;
+    }
+
+    const rating = document.querySelector("[data-feedback-rating]");
+    const comment = document.querySelector("[data-feedback-comment]");
+    const stateNode = document.querySelector("[data-feedback-state]");
+    const score = Math.max(1, Math.min(5, Number(review.rating) || 0));
+
+    if (rating) {
+      rating.textContent =
+        score + "/5 · " + "★".repeat(score) + "☆".repeat(5 - score);
+    }
+    if (comment) {
+      comment.textContent = review.comment
+        ? "“" + review.comment + "”"
+        : "No written comment.";
+    }
+    if (stateNode) {
+      const moderation = String(review.moderationStatus || "APPROVED").toUpperCase();
+      if (moderation === "HIDDEN") {
+        stateNode.textContent = "Recorded — hidden from the public doctor profile.";
+      } else if (moderation === "PENDING") {
+        stateNode.textContent = "Recorded — awaiting moderation.";
+      } else {
+        stateNode.textContent = review.createdAt
+          ? "Published " + formatDateTime(review.createdAt) + "."
+          : "Published on the doctor’s profile.";
+      }
+    }
+
+    card.hidden = false;
+  }
+
+  function updateConsultSummaryLine(hasSummary) {
+    const line = document.querySelector("[data-consult-summary-line]");
+    if (!line) return;
+
+    const appointment = state.consult.appointment;
+    const appointmentId = appointment && appointment.appointmentId;
+
+    if (hasSubmittedFeedback(appointmentId)) {
+      line.textContent = hasSummary
+        ? "Consultation summary published. Your feedback has been recorded."
+        : "Your feedback has been recorded for this consultation.";
+    } else if (hasSummary) {
+      line.textContent =
+        "Consultation completed. Clinical summary and prescription are published above.";
+    } else if (appointment && appointment.status === "COMPLETED") {
+      line.textContent =
+        "Consultation completed. You can read the summary and leave feedback.";
+    } else {
+      line.textContent =
+        "Visible to you after the doctor completes the consultation.";
+    }
+  }
+
+  function markFeedbackSubmitted(message, review) {
     const form = document.querySelector("[data-feedback-form]");
     const rating = $("consult-rt");
     const comment = $("consult-fc");
     const button = form && form.querySelector("button[type=submit]");
     const status = document.querySelector("[data-feedback-status]");
+    const appointmentId =
+      state.consult.appointment && state.consult.appointment.appointmentId;
+
+    if (appointmentId) state.submittedFeedbackIds.add(String(appointmentId));
+    renderFeedbackRecord(review || findMyReview(appointmentId));
+    updateConsultSummaryLine(Boolean(state.consult.summary));
 
     if (button) {
       button.disabled = true;
@@ -6100,10 +6191,13 @@
     try {
       const reviews = await MC.myReviews();
       state.myReviews = Array.isArray(reviews) ? reviews : [];
-      const submitted = state.myReviews.some(
-        (review) => review.appointmentId === appointmentId
-      );
-      if (submitted) markFeedbackSubmitted();
+      const review = findMyReview(appointmentId);
+      if (review) {
+        markFeedbackSubmitted(undefined, review);
+      } else {
+        renderFeedbackRecord(null);
+        updateConsultSummaryLine(Boolean(state.consult.summary));
+      }
     } catch {
       // Feedback remains protected by the backend's one-review-per-appointment rule.
     }
@@ -6118,32 +6212,60 @@
 
     if (!appointment) return;
 
-    if (
-      (state.myReviews || []).some(
-        (review) => review.appointmentId === appointment.appointmentId
-      )
-    ) {
-      markFeedbackSubmitted();
+    const appointmentId = appointment.appointmentId;
+    const existing = findMyReview(appointmentId);
+    if (existing || state.submittedFeedbackIds.has(String(appointmentId))) {
+      markFeedbackSubmitted(undefined, existing);
       return;
     }
+
+    const ratingValue = Number(rating ? rating.value : 5);
+    const commentValue = comment ? comment.value.trim() : "";
 
     if (button) button.disabled = true;
 
     try {
-      await MC.submitReview(
-        appointment.appointmentId,
-        Number(rating ? rating.value : 5),
-        comment ? comment.value.trim() : ""
+      const saved = await MC.submitReview(appointmentId, ratingValue, commentValue);
+      const record = Object.assign(
+        {
+          appointmentId,
+          rating: ratingValue,
+          comment: commentValue,
+          moderationStatus: "APPROVED",
+        },
+        saved && typeof saved === "object" ? saved : {},
+        { appointmentId }
       );
-      state.myReviews = state.myReviews || [];
-      state.myReviews.push({ appointmentId: appointment.appointmentId });
-      markFeedbackSubmitted("Thank you — your feedback has been recorded.");
+
+      state.myReviews = [
+        ...(state.myReviews || []).filter(
+          (review) => String(review.appointmentId) !== String(appointmentId)
+        ),
+        record,
+      ];
+      markFeedbackSubmitted(
+        "Thank you — your feedback has been recorded.",
+        record
+      );
     } catch (error) {
       const duplicate = error.status === 409 || /already|duplicate/i.test(error.message || "");
       if (duplicate) {
-        state.myReviews = state.myReviews || [];
-        state.myReviews.push({ appointmentId: appointment.appointmentId });
-        markFeedbackSubmitted();
+        let review = findMyReview(appointmentId);
+        if (!review) {
+          try {
+            const reviews = await MC.myReviews();
+            if (Array.isArray(reviews)) {
+              state.myReviews = reviews;
+              review = findMyReview(appointmentId);
+            }
+          } catch {
+            // Keep the submitted id; the record can be read on the next visit.
+          }
+        }
+        markFeedbackSubmitted(
+          "You have already submitted feedback for this consultation.",
+          review
+        );
       } else {
         setStatus(document.querySelector("[data-feedback-status]"), error.message, true);
         if (button) button.disabled = false;
@@ -8455,6 +8577,8 @@
     state.consult.list = [];
     state.notifications = [];
     state.syncedSummaryNotifications.clear();
+    state.myReviews = [];
+    state.submittedFeedbackIds.clear();
     state.notificationsLoaded = false;
     if (state.auditLogTimer) clearInterval(state.auditLogTimer);
     state.auditLogTimer = null;
