@@ -5675,16 +5675,16 @@
 
     tr.innerHTML = `
       <td data-label="Time" class="whitespace-nowrap text-xs text-mute font-mono">${timeStr}</td>
-      <td data-label="User" class="text-sm font-medium text-ink">${escapeHtml(log.userEmail || "System")}${roleBadge}</td>
+      <td data-label="User ID" class="text-sm font-medium text-ink">${escapeHtml((log.userId || "").slice(0, 8) || "System")}${roleBadge}</td>
       <td data-label="Action" class="text-sm ${actionClass}">${escapeHtml(log.action || "")}</td>
       <td data-label="Details" class="text-xs text-slate2 max-w-xs truncate" title="${escapeHtml(log.details || "")}">${escapeHtml(log.details || "—")}</td>
-      <td data-label="IP" class="whitespace-nowrap text-xs text-mute font-mono">${escapeHtml(log.ipAddress || "127.0.0.1")}</td>
+      <td data-label="IP" class="whitespace-nowrap text-xs text-mute font-mono">${escapeHtml(log.ipAddress || "unknown")}</td>
     `;
     return tr;
   }
 
   function subscribeAdminAuditLogs() {
-    if (!S || (S.role !== "ADMIN" && S.role !== "MANAGER")) return;
+    if (!S || S.role !== "ADMIN") return;
     subscribe("admin-audit-logs", "/topic/audit-logs", (log) => {
       const tbody = document.querySelector("[data-admin-audit-tbody]");
       if (!tbody) return;
