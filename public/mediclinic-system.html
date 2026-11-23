@@ -28,9 +28,15 @@ body[data-app-ready="true"]>.app-boot-screen{display:none}
 /* Dark variants keep light text because their backgrounds are much darker. */
 .card-head-dark,.card-head-dark h1,.card-head-dark h2,.card-head-dark p,.card-head-dark label,
 .page-head-dark,.page-head-dark h1,.page-head-dark h2,.page-head-dark p,.page-head-dark label{color:#E6F4FA}
+/* White on the terracotta CTA colour is only 3:1; dark ink keeps AA contrast. */
+.bg-peach.text-white{color:#1A202C!important}
 .card-head-dark{background:#B3431B}
 .card-head-blue{background:#62B0D2}
 .page-head-dark{background:#0C2633}
+/* The profile banner uses the brand blue background, so it keeps light text. */
+.page-head[style*="2B7A9E"],.page-head[style*="2b7a9e"]{color:#E6F4FA}
+.page-head[style*="2B7A9E"] h1,.page-head[style*="2B7A9E"] p,
+.page-head[style*="2b7a9e"] h1,.page-head[style*="2b7a9e"] p{color:#E6F4FA}
 </style><style>
 /* Low-poly hospital mesh, anchored to the bottom of the viewport on every page. */
 body,

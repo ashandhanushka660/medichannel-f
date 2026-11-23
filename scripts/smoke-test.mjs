@@ -112,6 +112,10 @@ async function main() {
     assert(csp.includes("default-src 'self'"), "CSP defaults to same origin");
     assert(csp.includes("script-src 'self'"), "CSP allows only same-origin scripts");
     assert(
+      csp.includes("'sha256-"),
+      "CSP includes the hash for the inline view-selection script"
+    );
+    assert(
       !csp.includes("cdn.tailwindcss.com"),
       "CSP does not trust the Tailwind CDN"
     );
@@ -158,9 +162,21 @@ async function main() {
     assert(app.response.status === 200, "versioned app script returns 200");
     assert(
       (app.response.headers.get("cache-control") || "").includes(
-        "must-revalidate"
+        "immutable"
       ),
-      "app script is revalidated"
+      "versioned app script is immutable"
+    );
+
+    const font = await request("/fonts/plus-jakarta-sans-latin.woff2");
+    assert(
+      (font.response.headers.get("cache-control") || "").includes("immutable"),
+      "local font is immutable"
+    );
+
+    const image = await request("/images/hero-doctor-1000.jpg");
+    assert(
+      (image.response.headers.get("cache-control") || "").includes("immutable"),
+      "hero image is immutable"
     );
   }
 
