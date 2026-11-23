@@ -37,3 +37,21 @@ Brief source: `~/Documents/IT404050_Assignment_2_-_MediChannel_Brief.docx`. Orig
 | Persistence | records survive restart | n/a | JPA | FKs/indexes | n/a | restart tests | PASS (local) |
 | Deployment | Netlify + Render + Neon | netlify.toml | render.yaml | Flyway | env vars | smoke | PARTIAL — Netlify was 404 (fixed via plugin) |
 | Testing/docs | 30+ test cases, ERD, report, slides | `npm test` contract suites | 64 backend `@Test` methods | n/a | n/a | frontend + backend suites | PASS — automated suites verified; manual E2E evidence is tracked separately |
+---
+
+## Final verification addendum — 23 November 2026
+
+The table above is the original traceability snapshot. The following items were verified in the final redeployment cycle:
+
+| Area | Final status | Evidence |
+| --- | --- | --- |
+| Manager create-account specialisation dropdown | PASS | `tests/manager-specialisations.test.mjs`; manager view now calls `loadAdminSpecialisations()` |
+| Public demo credentials | REMOVED | No `data-fill-login` elements remain in `mediclinic-system.html`; credentials are supplied only via the LMS form |
+| CORS for Vercel + VPS/Cloudflare frontends | PASS | Exact origins in `APP_FRONTEND_ORIGIN`; wildcard Vercel origin removed |
+| WSS handshake | PASS | `101 Switching Protocols` for allowed origins, `403` for attacker origins |
+| BFF secure cookie login | PASS | `__Host-medichannel_token` with `Secure; HttpOnly; SameSite=lax` |
+| Caching | IMPLEMENTED | Caffeine TTL cache in backend service layer plus cacheable public responses |
+| Submission artefacts | PASS | Final report PDF, slides PDF, 30-case test table, role manuals, peer assessment, demo script |
+
+The current evidence-based mark is recorded in
+[`IT404050_ASSIGNMENT_2_FINAL_REPORT.md`](./IT404050_ASSIGNMENT_2_FINAL_REPORT.md).
