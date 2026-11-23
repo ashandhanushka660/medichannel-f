@@ -43,6 +43,14 @@
     "consult",
   ];
   const TZ = "Asia/Colombo";
+  // The published clinic day shared with the guest doctor directory and the
+  // backend booking rules. Patient sessions are only shown when they fit.
+  const CLINIC_START = "07:00";
+  const CLINIC_END = "16:00";
+  const CLINIC_HOURS = 8;
+  const SLOT_MINUTES = 10;
+  const CLINIC_HOURS_LABEL =
+    CLINIC_START + "–" + CLINIC_END + " · " + SLOT_MINUTES + " min per patient";
   const ManagerUI = window.MCManager;
   const prefersReducedMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
@@ -1917,6 +1925,17 @@
     };
   }
 
+  /**
+   * Only sessions for doctors advertised as available on the guest dashboard
+   * may be offered to a patient. The backend applies the same rule together
+   * with the 07:00–16:00 / 10-minute-slot congruence check.
+   */
+  function bookableSessions(sessions) {
+    return (Array.isArray(sessions) ? sessions : []).filter(
+      (session) => session && session.doctorAvailable !== false
+    );
+  }
+
   async function loadSessions() {
     if (state.sessionsLoading) return;
 
@@ -1936,16 +1955,19 @@
     if (list) list.replaceChildren();
 
     try {
-      let sessions = await MC.sessions(filters);
-      if (!Array.isArray(sessions)) throw new Error("Unexpected response");
+      const sessionResponse = await MC.sessions(filters);
+      if (!Array.isArray(sessionResponse)) throw new Error("Unexpected response");
+      let sessions = bookableSessions(sessionResponse);
 
       let fallbackNotice = "";
       // If filtering by date returned 0 sessions, fall back to all upcoming sessions
       // so the patient is never stranded on an empty screen.
       if (sessions.length === 0 && filters.date) {
         try {
-          const allUpcoming = await MC.sessions({ ...filters, date: "" });
-          if (Array.isArray(allUpcoming) && allUpcoming.length > 0) {
+          const allUpcoming = bookableSessions(
+            await MC.sessions({ ...filters, date: "" })
+          );
+          if (allUpcoming.length > 0) {
             sessions = allUpcoming;
             fallbackNotice = `No sessions match for ${formatDate(filters.date)}. Showing all upcoming sessions:`;
           }
@@ -2783,7 +2805,9 @@
 
       const hours = formatTime(doctor.defaultStartTime) +
         "–" + formatTime(doctor.defaultEndTime) +
-        " · " + (doctor.defaultHours || 8) + " hours";
+        " · " + (doctor.defaultHours || CLINIC_HOURS) + " hours" +
+        " · " + (doctor.minutesPerPatient || SLOT_MINUTES) +
+        " min per patient";
       const sessionHours = doctor.startTime && doctor.endTime
         ? "Session " + formatTime(doctor.startTime) +
           "–" + formatTime(doctor.endTime)
@@ -2821,7 +2845,7 @@
         const sessions = el(
           "a",
           "inline-flex items-center justify-center rounded-lg min-h-10 px-4 py-2 text-sm font-semibold bg-brand text-white hover:bg-brand-d",
-          "Find a session"
+          "Book a session"
         );
         sessions.href = "#index";
         if (doctor.doctorId) sessions.dataset.directoryDoctor = doctor.doctorId;
@@ -2948,7 +2972,11 @@
       el(
         "span",
         "",
-        formatTime(session.startTime) + "–" + formatTime(session.endTime)
+        formatTime(session.startTime) +
+          "–" +
+          formatTime(session.endTime) +
+          " · clinic " +
+          CLINIC_HOURS_LABEL
       ),
       el("span", "", formatDate(session.sessionDate)),
       el("b", "", money(session.feeLkr))
@@ -3152,6 +3180,7 @@
       meta.textContent = [
         formatDate(session.sessionDate),
         formatTime(session.startTime),
+        CLINIC_HOURS_LABEL,
         session.consultationType === "ONLINE" ? "Online" : "Physical",
         session.roomNumber ? "Room " + session.roomNumber : "Chat room",
         money(session.feeLkr),

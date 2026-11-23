@@ -104,6 +104,8 @@ function makeDirectoryHarness(session) {
     "formatTime",
     "S",
     "state",
+    "CLINIC_HOURS",
+    "SLOT_MINUTES",
     `${functionSource("doctorDisplayName")}
 ${functionSource("money")}
 ${functionSource("formatTime")}
@@ -112,7 +114,7 @@ ${functionSource("directoryAttendance")}
 ${functionSource("filteredDirectoryItems")}
 ${functionSource("renderDoctorDirectory")}
 return { renderDoctorDirectory, filteredDirectoryItems };`
-  )(document, el, badge, null, null, null, session, state);
+  )(document, el, badge, null, null, null, session, state, 8, 10);
 
   return { list, render: render.renderDoctorDirectory, state, status, text };
 }
@@ -182,6 +184,7 @@ test("guest cards show availability, room, fee, hours, attendance and live queue
     "LKR 2,500",
     "07:00–16:00",
     "8 hours",
+    "10 min per patient",
     "Physical · in consultation",
     "Now serving",
     "#3",
@@ -204,7 +207,7 @@ test("signed-in patients are sent from the directory to the unchanged session da
     .flatMap((child) => child.children || [])
     .filter((child) => child.tag === "a");
 
-  const sessionLink = links.find((link) => link.textContent === "Find a session");
+  const sessionLink = links.find((link) => link.textContent === "Book a session");
   assert.ok(sessionLink);
   assert.equal(sessionLink.href, "#index");
   assert.ok(links.every((link) => link.href !== "#login"));
