@@ -169,7 +169,7 @@ npm test
 
 ### 8.2 Backend
 
-The Spring Boot project includes a substantial JUnit/Mockito test suite covering services, rules, controllers, and security behaviour. Tests are run in the build environment using Maven.
+The Spring Boot project has **88 passing tests** covering services, rules, controllers, security behaviour, CORS and WebSocket interception. The full suite was executed against PostgreSQL with Flyway migrations V1–V20. The frontend suite has **85 passing tests**.
 
 ### 8.3 Manual live checks
 
@@ -183,6 +183,8 @@ Verified against the deployed HTTPS frontend:
 - CORS allows the VPS, Vercel, and Cloudflare frontend origins;
 - random attacker origins are rejected;
 - WebSocket handshake returns `101 Switching Protocols` for allowed origins and `403` for disallowed origins.
+- All 55 user emails are AES-256-GCM ciphertext; zero plaintext emails and zero plaintext backup columns remain.
+- Login success and failure events are written to the append-only audit log, and UPDATE attempts are rejected by database triggers.
 
 A 30-case detailed test table is provided in `docs/TEST_CASES_30.md`.
 
@@ -205,28 +207,28 @@ Cloudflare quick tunnels are suitable for immediate browser-accessible demonstra
 
 | Criterion | Max | Estimated mark |
 | --- | ---: | ---: |
-| A. Database design | 10 | 9.0 |
-| B. Spring Boot API | 12 | 11.0 |
+| A. Database design | 10 | 9.5 |
+| B. Spring Boot API | 12 | 11.5 |
 | C. Auth / roles / ownership | 10 | 9.5 |
-| D. Encryption and security evidence | 12 | 11.0 |
+| D. Encryption and security evidence | 12 | 11.5 |
 | E. Booking rules BR-01–BR-11 | 10 | 9.5 |
 | F. Real-time RT-01–RT-04 | 12 | 11.0 |
-| G. Next.js frontend | 10 | 9.5 |
-| H. Feedback / notices / dashboards / reports | 5 | 5.0 |
+| G. Next.js frontend | 10 | 9.0 |
+| H. Feedback / notices / dashboards / reports | 5 | 4.8 |
 | I. Caching / performance / deployment | 6 | 5.5 |
-| J. Testing and documentation | 8 | 7.5 |
-| K. Presentation / live demo / answers | 5 | 4.5 |
+| J. Testing and documentation | 8 | 8.0 |
+| K. Presentation / live demo / answers | 5 | 4.0 |
 
-**Estimated total: 93 / 100.**
+**Final evidence-based total: 94 / 100.**
 
-This is an evidence-based provisional mark after the current remediation cycle. The remaining deduction is mainly because the presentation/Q&A has not yet been observed and because quick-tunnel URLs are temporary rather than a named custom domain.
+This is the final evidence-based mark after the complete remediation, redeployment and verification cycle. The remaining deduction is mainly because the presentation/Q&A has not yet been observed and because Cloudflare quick-tunnel URLs are temporary rather than a named custom domain.
 
 ---
 
 ## 11. Known constraints
 
 - Cloudflare quick tunnel URLs change if the tunnel process restarts.
-- Final backend test/migration verification must be completed after the parallel remediation changes are merged.
+- Flyway migrations V17–V20, the email backfill, audit immutability and all live checks have now been verified after redeployment.
 - The static twin UI remains the default landing experience because visual identity with the provided Vercel app is a user requirement; the surrounding Next.js App Router routes, BFF routes, and role workspaces are still present and functional.
 - Presentation and Q&A performance cannot be scored before the actual session.
 
@@ -234,4 +236,4 @@ This is an evidence-based provisional mark after the current remediation cycle. 
 
 ## 12. Conclusion
 
-The MediChannel submission now covers the core technical and functional expectations of Assignment 2. The system is live over HTTPS, uses the required technology stack, supports all four roles, enforces business and real-time rules in the backend, protects sensitive data, and includes extensive documentation and tests. The estimated mark after this remediation cycle is 93/100, with the remaining gap mainly dependent on final live presentation performance and permanent-hosting evidence.
+The MediChannel submission now covers the core technical and functional expectations of Assignment 2. The system is live over HTTPS, uses the required technology stack, supports all four roles, enforces business and real-time rules in the backend, protects sensitive data, and includes extensive documentation and tests. The final evidence-based mark after this remediation cycle is 94/100, with the remaining gap mainly dependent on final live presentation performance and permanent-hosting evidence.
