@@ -1650,6 +1650,10 @@
       state.syncedReviewNotifications.clear();
       state.myReviews = [];
       state.submittedFeedbackIds.clear();
+      state.appointments = [];
+      state.appointmentsLoaded = false;
+      clearBookingPanel();
+      hideQueue();
       renderNotificationBadge(0);
       return;
     }
@@ -1670,6 +1674,10 @@
     state.syncedReviewNotifications.clear();
     state.myReviews = [];
     state.submittedFeedbackIds.clear();
+    state.appointments = [];
+    state.appointmentsLoaded = false;
+    state.profile = null;
+    clearBookingPanel();
     state.doctor.sessions = [];
     state.doctor.sessionsLoaded = false;
     state.doctor.sessionId = null;
@@ -1735,7 +1743,10 @@
     state.syncedSummaryNotifications.clear();
     state.syncedReviewNotifications.clear();
     state.submittedFeedbackIds.clear();
+    state.appointments = [];
+    state.appointmentsLoaded = false;
     disconnectRealtime();
+    clearBookingPanel();
     render();
     hideQueue();
     setAppMessage("Your session expired. Please sign in again.");
@@ -2786,6 +2797,61 @@
 
     card.append(header, meta, capacityWrap, footer);
     return card;
+  }
+
+  /**
+   * A booking confirmation belongs to the account that made it. Clear the
+   * whole booking panel when that account logs out or expires so a later
+   * visitor never sees another patient's reference, queue number or payment.
+   */
+  function clearBookingPanel() {
+    state.booking = null;
+    state.selectedSession = null;
+
+    const title = document.querySelector("[data-booking-title]");
+    if (title) title.textContent = "Book a session";
+
+    const meta = document.querySelector("[data-booking-meta]");
+    if (meta) meta.textContent = "Choose a session to continue.";
+
+    const form = document.querySelector("[data-booking-form]");
+    if (form) form.hidden = true;
+
+    const success = document.querySelector("[data-booking-success]");
+    if (success) success.hidden = true;
+
+    const reason = $("index-rs");
+    if (reason) reason.value = "";
+
+    const note = document.querySelector("[data-booking-note]");
+    if (note) {
+      note.textContent = "To finish booking, please log in or create a free account.";
+    }
+
+    const error = document.querySelector("[data-booking-error]");
+    if (error) {
+      error.hidden = true;
+      error.textContent = "";
+    }
+
+    const reference = document.querySelector("[data-booking-reference]");
+    if (reference) reference.textContent = "—";
+    const number = document.querySelector("[data-booking-number]");
+    if (number) number.textContent = "—";
+    const estimate = document.querySelector("[data-booking-estimate]");
+    if (estimate) estimate.textContent = "—";
+    const message = document.querySelector("[data-booking-message]");
+    if (message) message.textContent = "";
+
+    const pay = document.querySelector("[data-booking-pay]");
+    if (pay) {
+      pay.hidden = true;
+      pay.disabled = false;
+      delete pay.dataset.bookingPay;
+    }
+
+    const goButton = document.querySelector("[data-booking-goto]");
+    if (goButton) delete goButton.dataset.bookingGoto;
   }
 
   function selectSession(session, options) {
@@ -8745,6 +8811,8 @@
     disconnectRealtime();
     state.appointments = [];
     state.appointmentsLoaded = false;
+    state.profile = null;
+    clearBookingPanel();
     state.doctor = {
       sessions: [],
       sessionsLoaded: false,
@@ -8752,6 +8820,8 @@
       queue: null,
       selected: null,
       summary: null,
+      profile: null,
+      identityLoading: false,
       queueTimer: null,
     };
     state.consult.appointmentId = null;
@@ -9557,7 +9627,14 @@
 
   window.addEventListener("hashchange", () => go());
 
-  window.addEventListener("pageshow", () => {
+  window.addEventListener("pageshow", (event) => {
+    if (event && event.persisted && !S) {
+      // A back/forward-cache restore can bring back the pre-logout DOM.
+      clearBookingPanel();
+      hideQueue();
+      render();
+      return;
+    }
     if (document.body.dataset.appReady === "true" && S) {
       void refreshPatientQueue();
     }
