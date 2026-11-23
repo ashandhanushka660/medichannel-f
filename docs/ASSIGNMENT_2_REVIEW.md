@@ -1,3 +1,6 @@
+> **SUPERSEDED BY FINAL REPORT — 23 November 2026**  
+> This is a historical review. The current evidence-based mark is in [`IT404050_ASSIGNMENT_2_FINAL_REPORT.md`](./IT404050_ASSIGNMENT_2_FINAL_REPORT.md).
+
 # MediChannel — IT404050 Assignment 2 Review
 
 **Brief:** `~/Documents/IT404050_Assignment_2_-_MediChannel_Brief.docx`
