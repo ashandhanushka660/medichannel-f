@@ -237,7 +237,7 @@ test("every doctor entry path starts the online consultation", () => {
 
 test("a 409 from startConsultation is verified against the server, not treated as success", () => {
   assert.doesNotMatch(APP_SOURCE, /if \(!error \|\| error\.status !== 409\)/);
-  assert.match(APP_SOURCE, /await loadDoctorQueue\(state\.doctor\.sessionId, \{ silent: true \}\);/);
-  assert.match(APP_SOURCE, /if \(!fresh \|\| fresh\.status !== "IN_CONSULTATION"\)/);
+  assert.match(APP_SOURCE, /const active = await refreshConsultationStatus\(appointment\.appointmentId\);/);
+  assert.match(APP_SOURCE, /if \(!active\) \{[\s\S]*?return false;/);
   assert.match(APP_SOURCE, /return true;\n  \}\n\n  async function runDoctorAction/);
 });

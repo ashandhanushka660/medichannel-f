@@ -1,8 +1,9 @@
 /* MediChannel browser API client.
  *
- * Every call goes through the same-origin BFF, which attaches the
- * HttpOnly session cookie as a Bearer token. The access token is never
- * visible to this file.
+ * Every call goes through the same-origin BFF. A tab-specific bearer token
+ * (mc_tab_token in sessionStorage) is attached when present, so two logged-in
+ * tabs do not depend on the shared HttpOnly cookie. Otherwise the BFF falls
+ * back to that cookie.
  */
 (function () {
   "use strict";
@@ -21,10 +22,12 @@
 
   function friendlyMessage(status, body, fallback) {
     if (status === 403) {
-      const msg = (body && typeof body.message === "string" && body.message.trim())
+      // Each tab carries its own bearer token (mc_tab_token), so a 403 is the
+      // server's real access/state decision - not evidence that another tab
+      // replaced this tab's session. Show the actual reason to the user.
+      return (body && typeof body.message === "string" && body.message.trim())
         ? body.message.trim()
         : "You do not have access to this item.";
-      return msg + " (Note: If you signed into another account in a second tab, your session cookie was replaced. Please open the second user in an Incognito / Private window to test two users simultaneously.)";
     }
     if (body && typeof body.message === "string" && body.message.trim()) {
       return body.message.trim();

@@ -12,9 +12,9 @@ module.exports = {
       },
       colors: {
         brand: { DEFAULT: "#2B7A9E", d: "#236583" },
-        peach: { DEFAULT: "#E8734A", d: "#D65E34" },
-        ok: "#38A169",
-        bad: "#E53E3E",
+        peach: { DEFAULT: "#E8734A", d: "#B3431B" },
+        ok: "#276749",
+        bad: "#C53030",
         snow: "#F7F9FA",
         line: "#E2E8F0",
         ink: "#1A202C",

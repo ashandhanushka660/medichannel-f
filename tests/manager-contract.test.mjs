@@ -152,7 +152,7 @@ test("dashboard exposes a live status region and real metric slots", () => {
 
 test("manager helpers load before the application script", () => {
   const manager = HTML.indexOf("/mediclinic-manager.js?v=");
-  const app = HTML.indexOf("/mediclinic-app.js?v=");
+  const app = HTML.search(/\/mediclinic-app(?:\.min)?\.js\?v=/);
   assert.ok(manager > -1, "manager helper script missing");
   assert.ok(app > -1, "application script missing");
   assert.ok(manager < app, "helpers must load before mediclinic-app.js");

@@ -185,6 +185,7 @@ test("HTTP 401, 403, 404 keep specific safe messages", async () => {
       (error) => {
         assert.equal(error.status, status);
         assert.match(error.message, expected);
+        assert.doesNotMatch(error.message, /Incognito|session cookie/i);
         return true;
       }
     );

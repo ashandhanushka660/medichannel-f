@@ -93,8 +93,25 @@ const nextConfig: NextConfig = {
       "frame-ancestors 'none'",
     ].join("; ");
 
+    // These aliases lead to signed-in SPA views. Keep the public landing page
+    // indexable while telling crawlers not to index private-route aliases.
+    const privatePathHeaders = [
+      "/login",
+      "/register",
+      "/appointments",
+      "/profile",
+      "/consultation",
+      "/doctor/:path*",
+      "/manager/:path*",
+      "/admin/:path*",
+    ].map((source) => ({
+      source,
+      headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+    }));
+
     return [
       { source: "/:path*", headers: securityHeaders },
+      ...privatePathHeaders,
       {
         source: "/api/:path*",
         headers: [

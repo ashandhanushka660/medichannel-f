@@ -16,7 +16,14 @@ export async function GET(request: NextRequest) {
     ? incomingAuth.substring(7).trim()
     : readAuthToken(request);
   if (!token) {
-    return NextResponse.json({ message: "Authentication required." }, { status: 401 });
+    // A stale session hint should not keep making anonymous page loads call
+    // this endpoint. clearAuthCookie removes the non-secret hint as well.
+    const result = NextResponse.json(
+      { message: "Authentication required." },
+      { status: 401 }
+    );
+    clearAuthCookie(result);
+    return result;
   }
 
   const apiUrl = getBackendUrl();

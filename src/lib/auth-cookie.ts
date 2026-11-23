@@ -13,6 +13,14 @@ export const AUTH_COOKIE_NAME = isProduction
 
 const LEGACY_COOKIE_NAME = "medichannel_token";
 
+/**
+ * Non-secret hint that lets the public shell decide whether to call the
+ * session endpoint. It contains no token; the HttpOnly cookie remains the
+ * only credential. Without this hint every anonymous page view produces a
+ * 401 console error and an unnecessary backend round trip.
+ */
+export const SESSION_HINT_COOKIE_NAME = "medichannel_session_hint";
+
 const authCookieOptions = {
   httpOnly: true,
   secure: isProduction,
@@ -35,6 +43,12 @@ export function setAuthCookie(
     maxAge,
   });
 
+  response.cookies.set(SESSION_HINT_COOKIE_NAME, "1", {
+    ...authCookieOptions,
+    httpOnly: false,
+    maxAge,
+  });
+
   if (AUTH_COOKIE_NAME !== LEGACY_COOKIE_NAME) {
     response.cookies.set(LEGACY_COOKIE_NAME, "", {
       ...authCookieOptions,
@@ -46,6 +60,12 @@ export function setAuthCookie(
 export function clearAuthCookie(response: NextResponse) {
   response.cookies.set(AUTH_COOKIE_NAME, "", {
     ...authCookieOptions,
+    maxAge: 0,
+  });
+
+  response.cookies.set(SESSION_HINT_COOKIE_NAME, "", {
+    ...authCookieOptions,
+    httpOnly: false,
     maxAge: 0,
   });
 

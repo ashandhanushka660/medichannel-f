@@ -26,7 +26,22 @@
     return fetch(url, settings);
   };
 
+  // The server sets this non-secret cookie only alongside the HttpOnly auth
+  // cookie. Anonymous visitors therefore avoid a redundant 401 request.
+  const hasSessionHint = () =>
+    /(?:^|;\s*)medichannel_session_hint=1(?:;|$)/.test(document.cookie);
+
   const views = Array.from(document.querySelectorAll("[data-view]"));
+  const PRIVATE_VIEWS = [
+    "login",
+    "register",
+    "appointments",
+    "profile",
+    "doctor",
+    "manager",
+    "admin",
+    "consult",
+  ];
   const TZ = "Asia/Colombo";
   const ManagerUI = window.MCManager;
   const prefersReducedMotion = window.matchMedia(
@@ -461,7 +476,12 @@
     prefersReducedMotion.addListener(handleReducedMotionChange);
   }
 
-  enhanceMotionTree(document.body);
+  // Hidden views are display:none on first paint; enhance only the visible
+  // welcome view now and enhance each other view as it is shown.
+  const enhancedViews = new WeakSet();
+  const initialView = document.querySelector('[data-view="welcome"]');
+  if (initialView) enhancedViews.add(initialView);
+  enhanceMotionTree(initialView || document.body);
   new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach(enhanceMotionTree);
@@ -550,6 +570,7 @@
   let wakePromise = null;
   let bootTimer = null;
   let activeView = null;
+  let routeAnnounced = false;
 
   const state = {
     notifications: [],
@@ -604,22 +625,36 @@
   // Formatting helpers
   // ---------------------------------------------------------------
 
+  // Intl.DateTimeFormat construction is expensive; each formatter is created
+  // once and reused for every row rendered by the public and staff views.
+  const isoDayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
+  const shortDateFormatter = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: TZ,
+  });
+  const noticeDateFormatter = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: TZ,
+  });
+  const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: TZ,
+  });
+
   function todayISO() {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(
-      new Date()
-    );
+    return isoDayFormatter.format(new Date());
   }
 
   function formatDate(value) {
     if (!value) return "—";
     const date = new Date(String(value) + "T00:00:00");
     if (Number.isNaN(date.getTime())) return String(value);
-    return new Intl.DateTimeFormat("en-GB", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      timeZone: TZ,
-    }).format(date);
+    return shortDateFormatter.format(date);
   }
 
   function formatTime(value) {
@@ -637,12 +672,7 @@
     const text = String(value);
     const date = new Date(text.length === 10 ? text + "T00:00:00" : text);
     if (Number.isNaN(date.getTime())) return text.slice(0, 10);
-    return new Intl.DateTimeFormat("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      timeZone: TZ,
-    }).format(date);
+    return noticeDateFormatter.format(date);
   }
 
   function formatDateTime(value) {
@@ -654,11 +684,7 @@
     }
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "—";
-    return new Intl.DateTimeFormat("en-GB", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: TZ,
-    }).format(date);
+    return dateTimeFormatter.format(date);
   }
 
   function money(value) {
@@ -754,6 +780,13 @@
   function setAppMessage(message, tone) {
     const notice = $("app-session-warning");
     if (!notice) return;
+
+    if (!message) {
+      notice.hidden = true;
+      notice.replaceChildren();
+      return;
+    }
+
     const styles = {
       warning:
         "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-lg",
@@ -762,9 +795,78 @@
       error:
         "fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100%-2rem)] rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-lg",
     };
-    notice.className = styles[tone] || styles.warning;
-    notice.textContent = message || "";
-    notice.hidden = !message;
+    notice.className = (styles[tone] || styles.warning) + " flex items-start gap-3";
+
+    const text = el("span", "flex-1 leading-snug", message);
+    const close = el(
+      "button",
+      "shrink-0 cursor-pointer rounded px-1.5 text-lg font-bold leading-tight text-slate2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand",
+      "×"
+    );
+    close.type = "button";
+    close.setAttribute("aria-label", "Dismiss message");
+    close.title = "Dismiss";
+    close.addEventListener("click", () => setAppMessage(""));
+
+    notice.replaceChildren(text, close);
+    notice.hidden = false;
+  }
+
+  // Screen-reader-friendly navigation and dialog helpers. The announcer is
+  // updated after the view is visible so route changes are not lost in the
+  // same render task as the hash change.
+  let routeAnnounceTimer = 0;
+  function announceRoute(title) {
+    const announcer = $("route-announcer");
+    if (!announcer) return;
+    clearTimeout(routeAnnounceTimer);
+    routeAnnounceTimer = setTimeout(() => {
+      announcer.textContent = "";
+      requestAnimationFrame(() => {
+        announcer.textContent = title + " page loaded";
+      });
+    }, 120);
+  }
+
+  function focusViewHeading(view) {
+    const heading = view && (view.querySelector("main h1, main h2") || view.querySelector("h1, h2"));
+    if (!heading) return;
+    heading.setAttribute("tabindex", "-1");
+    heading.focus({ preventScroll: true });
+  }
+
+  let lastDialogTrigger = null;
+  function openModal(dialog, focusTarget) {
+    if (!dialog || typeof dialog.showModal !== "function") return;
+    lastDialogTrigger = document.activeElement;
+    dialog.showModal();
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus({ preventScroll: true });
+    }
+  }
+
+  document.querySelectorAll("dialog").forEach((dialog) => {
+    dialog.addEventListener("close", () => {
+      const trigger = lastDialogTrigger;
+      lastDialogTrigger = null;
+      if (
+        trigger &&
+        trigger.isConnected &&
+        trigger.getClientRects().length &&
+        typeof trigger.focus === "function"
+      ) {
+        trigger.focus({ preventScroll: true });
+      }
+    });
+  });
+
+  function closeNotificationPopovers() {
+    document.querySelectorAll("[data-notification-popover]").forEach((p) => {
+      p.hidden = true;
+    });
+    document.querySelectorAll("[data-notification-bell]").forEach((bell) => {
+      bell.setAttribute("aria-expanded", "false");
+    });
   }
 
   function setWakeMessage(message) {
@@ -1274,6 +1376,10 @@
       views.forEach((item) => {
         item.hidden = item !== view;
       });
+      if (!enhancedViews.has(view)) {
+        enhanceMotionTree(view);
+        enhancedViews.add(view);
+      }
 
       activeView = targetId;
 
@@ -1281,6 +1387,23 @@
       initPanels(view, panel);
 
       document.title = view.dataset.title + " · MediChannel";
+
+      const robotsMeta = document.querySelector('meta[name="robots"]');
+      if (robotsMeta) {
+        robotsMeta.setAttribute(
+          "content",
+          PRIVATE_VIEWS.includes(targetId)
+            ? "noindex, nofollow"
+            : "index, follow, max-image-preview:large"
+        );
+      }
+
+      if (routeAnnounced) {
+        focusViewHeading(view);
+        announceRoute(view.dataset.title || "MediChannel");
+      } else {
+        routeAnnounced = true;
+      }
 
       const footer = document.querySelector("footer");
       if (footer) {
@@ -1535,8 +1658,10 @@
       try {
         const active = JSON.parse(event.newValue);
         if (S && active && active.email && active.email.toLowerCase() !== (S.email || "").toLowerCase()) {
+          // Two accounts can now be used in separate tabs: every tab sends
+          // its own mc_tab_token instead of relying on the shared cookie.
           setAppMessage(
-            `⚠️ Multi-tab session conflict: You signed into "${active.email}" in another tab. Browsers share session cookies across all tabs, so actions in this tab will fail. To use two accounts simultaneously, please open the second user in an Incognito / Private window.`
+            `Another account (${active.email}) was signed in in a different tab. This tab keeps its own session — carry on here, or sign in again if anything looks out of date.`
           );
         }
       } catch {}
@@ -4071,13 +4196,11 @@
     } catch (error) {
       if (error && error.status === 409) {
         // A retry after a lost response can report a conflict even though the
-        // first call actually succeeded. Ask the server for the real status
-        // instead of pretending the appointment started.
-        if (state.doctor.sessionId) {
-          await loadDoctorQueue(state.doctor.sessionId, { silent: true });
-        }
-        const fresh = findDoctorAppointment(appointment.appointmentId);
-        if (!fresh || fresh.status !== "IN_CONSULTATION") {
+        // first call actually succeeded. Re-read the lifecycle from the server
+        // instead of pretending the appointment started, including when the
+        // doctor opened this room outside the currently selected session.
+        const active = await refreshConsultationStatus(appointment.appointmentId);
+        if (!active) {
           if (!isServiceUnavailable(error)) setAppMessage(error.message);
           return false;
         }
@@ -4746,6 +4869,32 @@
       return;
     }
 
+    // Cached queue/appointment rows go stale while the other participant
+    // acts (for example, the doctor opens the room seconds ago). Confirm the
+    // current lifecycle with the server before deciding the room is locked.
+    try {
+      let fresh = null;
+      if (S.role === "CUSTOMER") {
+        fresh = await MC.myAppointment(appointmentId);
+      } else if (S.role === "DOCTOR") {
+        const all = await MC.doctorAppointments({});
+        if (Array.isArray(all)) {
+          fresh = all.find(
+            (item) => String(item.appointmentId) === String(appointmentId)
+          ) || null;
+        }
+      }
+      if (fresh) {
+        appointment = Object.assign({}, appointment, fresh);
+        const index = list.findIndex(
+          (item) => String(item.appointmentId) === String(appointmentId)
+        );
+        if (index >= 0) list[index] = appointment;
+      }
+    } catch {
+      // Keep the cached row; the room itself still reports a clear error.
+    }
+
     // Doctors reach this room from the queue chat button, the notes panel,
     // the appointment table, a deep link or the picker. Start the online
     // consultation on every path, otherwise both participants sit in a
@@ -4873,7 +5022,10 @@
             void selectNotes(appointment);
           }, 100);
         } catch (err) {
-          alert(err.message || "Could not complete consultation");
+          setAppMessage(
+            (err && err.message) || "Could not complete consultation",
+            "error"
+          );
           completeBtn.disabled = false;
         }
       };
@@ -4895,12 +5047,191 @@
         }, 100);
       };
     }
+
+    renderConsultRoomControls(appointment);
   }
 
-  async function loadChatHistory(appointmentId) {
+  function chatActionButton(label, onClick) {
+    const button = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 px-3 py-1.5 text-xs",
+      label
+    );
+    button.type = "button";
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  /** A dismissible error card inside the chat log (never an alert()). */
+  function showChatNotice(message, actions) {
     const log = document.querySelector("[data-chat-log]");
     if (!log) return;
 
+    const card = el(
+      "div",
+      "rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-bad"
+    );
+    const row = el("div", "flex items-start gap-3");
+    const text = el("span", "flex-1 whitespace-pre-wrap", message);
+    const close = el(
+      "button",
+      "shrink-0 cursor-pointer rounded px-1.5 text-lg font-bold leading-tight text-slate2 hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand",
+      "×"
+    );
+    close.type = "button";
+    close.setAttribute("aria-label", "Dismiss message");
+    close.title = "Dismiss";
+    close.addEventListener("click", () => card.remove());
+
+    row.append(text, close);
+    card.append(row);
+
+    if (actions && actions.length) {
+      const actionsRow = el("div", "mt-2 flex flex-wrap gap-2");
+      actions.forEach((button) => actionsRow.append(button));
+      card.append(actionsRow);
+    }
+
+    log.replaceChildren(card);
+  }
+
+  /**
+   * Re-read the appointment lifecycle from the server. The doctor can start
+   * the room in another tab, so cached queue/appointment rows are not enough
+   * to decide whether the chat is unlocked.
+   */
+  async function refreshConsultationStatus(appointmentId) {
+    if (!S) return false;
+
+    let fresh = null;
+    try {
+      if (S.role === "CUSTOMER") {
+        fresh = await MC.myAppointment(appointmentId);
+      } else if (S.role === "DOCTOR") {
+        const all = await MC.doctorAppointments({});
+        if (Array.isArray(all)) {
+          fresh = all.find(
+            (item) => String(item.appointmentId) === String(appointmentId)
+          ) || null;
+        }
+      }
+    } catch {
+      return false;
+    }
+
+    if (!fresh) return false;
+
+    const pools = [
+      state.consult.list,
+      state.appointments,
+      state.doctor.allAppointments,
+      state.doctor.sessionAppointments,
+      state.doctor.queue && state.doctor.queue.appointments,
+    ];
+    pools.forEach((pool) => {
+      if (!Array.isArray(pool)) return;
+      const index = pool.findIndex(
+        (item) => item && String(item.appointmentId) === String(appointmentId)
+      );
+      if (index >= 0) pool[index] = Object.assign({}, pool[index], fresh);
+    });
+
+    if (String(state.consult.appointmentId) === String(appointmentId)) {
+      state.consult.appointment = Object.assign(
+        {},
+        state.consult.appointment || {},
+        fresh
+      );
+      renderConsultHeader(state.consult.appointment);
+    }
+
+    return fresh.status === "IN_CONSULTATION";
+  }
+
+  async function startConsultationFromRoom(appointmentId) {
+    try {
+      await callWithWakeRetry(
+        () => MC.startConsultation(appointmentId),
+        { retry: true }
+      );
+      const active = await refreshConsultationStatus(appointmentId);
+      if (active) {
+        setAppMessage("");
+        await loadChatHistory(appointmentId);
+      } else {
+        setAppMessage(
+          "The consultation room is still locked. Refresh and try again.",
+          "warning"
+        );
+      }
+    } catch (error) {
+      setAppMessage(
+        (error && error.message) || "The consultation could not be started.",
+        "error"
+      );
+    }
+  }
+
+  /** Give both roles a visible way to unlock / refresh the consultation room. */
+  function renderConsultRoomControls(appointment) {
+    const section = document.querySelector('section[aria-label="Chat"]');
+    if (!section || !S || !appointment) return;
+
+    let controls = $("consult-room-control");
+    if (!controls) {
+      controls = el("div", "flex flex-wrap items-center gap-2");
+      controls.id = "consult-room-control";
+      const head = section.querySelector(".card-head");
+      if (head) head.after(controls);
+      else section.prepend(controls);
+    }
+    controls.replaceChildren();
+
+    if (appointment.status === "IN_CONSULTATION") return;
+
+    if (
+      S.role === "DOCTOR" &&
+      appointment.consultationType === "ONLINE" &&
+      ["BOOKED", "ARRIVED"].includes(appointment.status)
+    ) {
+      const paid = appointment.paymentStatus === "PAID";
+      const button = chatActionButton(
+        "Start consultation",
+        () => void startConsultationFromRoom(appointment.appointmentId)
+      );
+      button.disabled = !paid;
+      controls.append(
+        button,
+        el(
+          "span",
+          "text-xs text-mute",
+          paid
+            ? "Starting opens the private chat for both you and the patient."
+            : "Record the appointment payment before you start."
+        )
+      );
+    } else if (S.role === "CUSTOMER") {
+      controls.append(
+        chatActionButton("Refresh consultation status", async () => {
+          const active = await refreshConsultationStatus(appointment.appointmentId);
+          if (active) {
+            void loadChatHistory(appointment.appointmentId);
+          } else {
+            setAppMessage(
+              "Your doctor has not opened the consultation room yet. You can retry any time.",
+              "warning"
+            );
+          }
+        })
+      );
+    }
+  }
+
+  async function loadChatHistory(appointmentId, options) {
+    const log = document.querySelector("[data-chat-log]");
+    if (!log) return;
+
+    const settings = options || {};
     log.style.opacity = "0.7";
 
     try {
@@ -4918,8 +5249,42 @@
       messages.forEach((message) => appendChatMessage(message));
       log.scrollTop = log.scrollHeight;
     } catch (error) {
-      log.replaceChildren();
-      log.append(el("p", "text-sm text-bad", error.message));
+      const message = (error && error.message) ||
+        "The conversation could not be loaded.";
+      const locked = error && error.status === 403 &&
+        /active consultation|in consultation|not.*started/i.test(message);
+
+      // The room may have been opened by the doctor while this tab was idle.
+      // Refresh once before showing an error so the two accounts can chat.
+      if (locked && !settings.retried) {
+        const active = await refreshConsultationStatus(appointmentId);
+        if (active) {
+          return loadChatHistory(appointmentId, { retried: true });
+        }
+      }
+
+      const actions = [
+        chatActionButton("Retry", () => void loadChatHistory(appointmentId)),
+      ];
+      if (
+        S && S.role === "DOCTOR" &&
+        ["BOOKED", "ARRIVED"].includes(
+          (state.consult.appointment || {}).status
+        )
+      ) {
+        actions.push(
+          chatActionButton("Start consultation", () =>
+            void startConsultationFromRoom(appointmentId)
+          )
+        );
+      }
+
+      showChatNotice(
+        locked
+          ? message + " The doctor opens the room by starting the consultation; you can retry any time."
+          : message,
+        actions
+      );
     } finally {
       log.style.opacity = "1";
     }
@@ -5013,8 +5378,18 @@
       async (payload) => {
         if (!payload || !state.consult.appointment) return;
 
+        const previous = state.consult.appointment.status;
         state.consult.appointment.status = payload.status;
         renderConsultHeader(state.consult.appointment);
+
+        // The doctor may open the room while this tab is on the consultation
+        // page. Reload automatically instead of leaving a stale lock message.
+        if (
+          previous !== "IN_CONSULTATION" &&
+          payload.status === "IN_CONSULTATION"
+        ) {
+          void loadChatHistory(id);
+        }
 
         if (payload.status === "COMPLETED") {
           await loadConsultSummary(id);
@@ -5625,7 +6000,7 @@
 
     setStatus(form.querySelector("[data-edit-status]"), "");
     loadOnce(loadAdminSpecialisations);
-    dialog.showModal();
+    openModal(dialog, form.querySelector("input:not([type=hidden]), select"));
   }
 
   function openDeleteAccount(userId) {
@@ -5642,8 +6017,7 @@
     const submit = form.querySelector("[data-delete-submit]");
     if (submit) submit.disabled = true;
     setStatus(form.querySelector("[data-delete-status]"), "");
-    dialog.showModal();
-    if (confirmInput) confirmInput.focus();
+    openModal(dialog, confirmInput);
   }
 
   function openResetPassword(userId) {
@@ -5661,9 +6035,7 @@
     if (submit) ManagerUI.unlockAction(submit);
     setStatus(form.querySelector("[data-reset-status]"), "");
 
-    dialog.showModal();
-    const first = form.querySelector("[data-reset-password]");
-    if (first && typeof first.focus === "function") first.focus();
+    openModal(dialog, form.querySelector("[data-reset-password]"));
   }
 
   function renderAuditLogRow(log) {
@@ -7068,10 +7440,8 @@
       if (submit.dataset) submit.dataset.busy = "false";
     }
 
-    dialog.showModal();
+    openModal(dialog, form.querySelector("[data-walkin-first-name]"));
     void loadWalkInSessions(form.querySelector("[data-walkin-session]"), status);
-    const first = form.querySelector("[data-walkin-first-name]");
-    if (first && typeof first.focus === "function") first.focus();
   }
 
   async function submitWalkIn(form) {
@@ -7736,10 +8106,27 @@
   });
 
   document.addEventListener("click", async (event) => {
-    if (!event.target.closest("[data-notification-wrapper]")) {
-      document.querySelectorAll("[data-notification-popover]").forEach((p) => {
-        p.hidden = true;
+    const skipLink = event.target.closest && event.target.closest("[data-skip-link]");
+    if (skipLink) {
+      event.preventDefault();
+      document.querySelectorAll('main[id="main-content"]').forEach((main) => {
+        main.removeAttribute("id");
       });
+      const visibleView =
+        views.find((view) => !view.hidden) ||
+        document.querySelector('[data-view="welcome"]');
+      const main = visibleView && visibleView.querySelector("main");
+      if (main) {
+        main.id = "main-content";
+        main.setAttribute("tabindex", "-1");
+        main.focus({ preventScroll: true });
+        main.scrollIntoView({ block: "start" });
+      }
+      return;
+    }
+
+    if (!event.target.closest("[data-notification-wrapper]")) {
+      closeNotificationPopovers();
     }
 
     const bellBtn = event.target.closest("[data-notification-bell]");
@@ -7749,10 +8136,9 @@
         const popover = wrapper.querySelector("[data-notification-popover]");
         if (popover) {
           const wasHidden = popover.hidden;
-          document.querySelectorAll("[data-notification-popover]").forEach((p) => {
-            p.hidden = true;
-          });
+          closeNotificationPopovers();
           popover.hidden = !wasHidden;
+          bellBtn.setAttribute("aria-expanded", String(!popover.hidden));
           if (!popover.hidden) {
             renderNotificationPopover(popover);
           }
@@ -8492,8 +8878,47 @@
   // Boot
   // ---------------------------------------------------------------
 
+  function finishBoot(unavailable) {
+    if (bootTimer) {
+      clearTimeout(bootTimer);
+      bootTimer = null;
+    }
+
+    document.body.dataset.appReady = "true";
+
+    if (unavailable && !S) {
+      setAppMessage(
+        "We could not verify your session. Please sign in again or retry."
+      );
+    }
+
+    render();
+
+    const target = resolveView(parseHash());
+    showView(target.id, target.panel, { force: true });
+
+    if (target.consultId) {
+      state.consult.requestedId = target.consultId;
+      if (activeView === "consult") void loadConsultationPicker();
+    }
+  }
+
   async function initializeApp() {
     let unavailable = false;
+    let tabToken = null;
+    try {
+      tabToken = sessionStorage.getItem("mc_tab_token");
+    } catch {}
+
+    // No cookie hint and no tab token means there is definitely no session to
+    // restore. Rendering immediately keeps anonymous Lighthouse runs clean.
+    if (!hasSessionHint() && !tabToken) {
+      S = null;
+      // Yield after script evaluation so first paint and boot rendering are
+      // separate main-thread tasks.
+      setTimeout(() => finishBoot(false), 0);
+      return;
+    }
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -8521,28 +8946,7 @@
       }
     }
 
-    if (bootTimer) {
-      clearTimeout(bootTimer);
-      bootTimer = null;
-    }
-
-    document.body.dataset.appReady = "true";
-
-    if (unavailable && !S) {
-      setAppMessage(
-        "We could not verify your session. Please sign in again or retry."
-      );
-    }
-
-    render();
-
-    const target = resolveView(parseHash());
-    showView(target.id, target.panel, { force: true });
-
-    if (target.consultId) {
-      state.consult.requestedId = target.consultId;
-      if (activeView === "consult") void loadConsultationPicker();
-    }
+    finishBoot(unavailable);
   }
 
   bootTimer = setTimeout(() => {

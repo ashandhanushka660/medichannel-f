@@ -81,6 +81,24 @@ async function main() {
       !text.includes("bcrypt") && !text.includes("AES-256-GCM"),
       "no unverifiable crypto claims in the frontend"
     );
+    const versions = [
+      ...text.matchAll(
+        /\/(?:vendor\/mediclinic-tailwind\.css|images\/hero-doctor-1000\.jpg|mediclinic-(?:api|manager|app)\.js)\?v=([^"']+)/g
+      ),
+    ].map((match) => match[1]);
+    assert(
+      versions.length === 5 && new Set(versions).size === 1,
+      "all versioned static assets share one cache-busting version"
+    );
+    assert(
+      text.includes('<main id="main-content" tabindex="-1"'),
+      "skip link has a static main-content target"
+    );
+    assert(
+      text.includes('meta[name="robots"]') &&
+        text.includes('meta.setAttribute("content","noindex,nofollow")'),
+      "private hash routes request noindex while the public page remains indexable"
+    );
     assert(!text.includes("<iframe"), "no iframes in the static app");
     const brandLinks =
       text.match(/<a\b[^>]*>(?:(?!<\/a>)[\s\S])*?MediChannel[\s\S]*?<\/a>/g) ||
@@ -217,6 +235,21 @@ async function main() {
 
   console.log("\nSearch and discovery");
   {
+    const robots = await request("/robots.txt");
+    assert(robots.response.status === 200, "robots.txt is served");
+    assert(
+      robots.text.includes("mediclinic-system.html") &&
+        robots.text.includes("sitemap.xml"),
+      "robots.txt points crawlers to the public app and sitemap"
+    );
+
+    const sitemap = await request("/sitemap.xml");
+    assert(sitemap.response.status === 200, "sitemap.xml is served");
+    assert(
+      sitemap.text.includes("https://app.medichannel.dpdns.org/mediclinic-system.html"),
+      "sitemap uses the canonical production URL"
+    );
+
     const sessions = await request("/api/backend/sessions");
     assert(
       sessions.response.status === 200,
