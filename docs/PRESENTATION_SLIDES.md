@@ -51,5 +51,5 @@ Docs include audit, security review, traceability matrix, test report, and this 
 
 ## Slide 10 — Conclusion
 Complete full-stack system with secure role-based workflows and live deployment.  
-Final evidence-based mark: 94/100.  
-Remaining improvement: named Cloudflare domain and final presentation/Q&A.
+Final evidence-based mark: 95/100.
+Remaining improvement: final presentation/Q&A.

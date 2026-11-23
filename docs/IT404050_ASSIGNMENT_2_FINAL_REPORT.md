@@ -213,15 +213,15 @@ A Cloudflare named tunnel provides the permanent browser-accessible HTTPS hostna
 | D. Encryption and security evidence | 12 | 11.5 |
 | E. Booking rules BR-01–BR-11 | 10 | 9.5 |
 | F. Real-time RT-01–RT-04 | 12 | 11.0 |
-| G. Next.js frontend | 10 | 9.0 |
+| G. Next.js frontend | 10 | 9.5 |
 | H. Feedback / notices / dashboards / reports | 5 | 4.8 |
-| I. Caching / performance / deployment | 6 | 5.5 |
+| I. Caching / performance / deployment | 6 | 5.8 |
 | J. Testing and documentation | 8 | 8.0 |
 | K. Presentation / live demo / answers | 5 | 4.0 |
 
-**Final evidence-based total: 94 / 100.**
+**Final evidence-based total: 95 / 100.**
 
-This is the final evidence-based mark after the complete remediation, redeployment and verification cycle. The remaining deduction is mainly because the live presentation/Q&A and OBS recording have not yet been observed.
+This is the final evidence-based mark after the complete remediation, redeployment and verification cycle. The frontend Lighthouse remediation raised criterion G from 9.0 to 9.5 and criterion I from 5.5 to 5.8: final local measurements were 96/100/100/100 on simulated mobile, 96/100/100/100 on DevTools-throttled mobile, and 100/100/100/100 on desktop, with CLS 0.010–0.011 and 114/114 unit plus 54/54 smoke checks passing. The remaining deduction is mainly because the live presentation/Q&A and OBS recording have not yet been observed. Detailed evidence is in [`FRONTEND_LIGHTHOUSE_REMEDIATION_REPORT.md`](./FRONTEND_LIGHTHOUSE_REMEDIATION_REPORT.md).
 
 ---
 
@@ -236,4 +236,4 @@ This is the final evidence-based mark after the complete remediation, redeployme
 
 ## 12. Conclusion
 
-The MediChannel submission now covers the core technical and functional expectations of Assignment 2. The system is live over HTTPS, uses the required technology stack, supports all four roles, enforces business and real-time rules in the backend, protects sensitive data, and includes extensive documentation and tests. The final evidence-based mark after this remediation cycle is 94/100, with the remaining gap mainly dependent on final live presentation performance and permanent-hosting evidence.
+The MediChannel submission now covers the core technical and functional expectations of Assignment 2. The system is live over HTTPS, uses the required technology stack, supports all four roles, enforces business and real-time rules in the backend, protects sensitive data, and includes extensive documentation and tests. The final evidence-based mark after this remediation cycle is 95/100, with the remaining gap mainly dependent on final live presentation performance and permanent-hosting evidence.
