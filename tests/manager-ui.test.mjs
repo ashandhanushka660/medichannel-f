@@ -7,6 +7,10 @@ const SOURCE = readFileSync(
   new URL("../public/mediclinic-manager.js", import.meta.url),
   "utf8"
 );
+const HTML_SOURCE = readFileSync(
+  new URL("../public/mediclinic-system.html", import.meta.url),
+  "utf8"
+);
 
 function loadManagerUI() {
   const sandbox = { window: {} };
@@ -16,6 +20,17 @@ function loadManagerUI() {
 }
 
 const UI = loadManagerUI();
+
+test("the manager create-session form opens at the clinic start time", () => {
+  assert.match(
+    HTML_SOURCE,
+    /<input id="sess-start" type="time" value="07:00"[^>]*>/
+  );
+  assert.match(
+    HTML_SOURCE,
+    /<input id="sess-end" type="time" value="12:00"[^>]*>/
+  );
+});
 
 test("notice payload matches the backend contract", () => {
   const result = UI.noticePayload("  Clinic closed  ", "  Sunday only  ");
