@@ -20,13 +20,14 @@ test("booking confirmation shows booking time, queue place, slot and finish", ()
   assert.match(APP, /function appointmentSlot\(value\)/);
   assert.match(APP, /allocation\.minutes/);
   assert.match(APP, /created\.textContent = appointment\.bookedAt/);
+  assert.match(APP, /formatInstant\(appointment\.bookedAt\)/);
   assert.match(APP, /slot\.textContent =/);
 });
 
 test("my appointments repeats the queue place, booking time and slot", () => {
   assert.match(HTML, /<th>Queue, time &amp; slot<\/th>/);
   assert.match(APP, /"Queue #" \+ appointment\.appointmentNumber/);
-  assert.match(APP, /"Booked " \+ formatDateTime\(appointment\.bookedAt\)/);
+  assert.match(APP, /"Booked " \+ formatInstant\(appointment\.bookedAt\)/);
   assert.match(APP, /"Slot " \+ allocation\.range \+ " · finishes "/);
 });
 

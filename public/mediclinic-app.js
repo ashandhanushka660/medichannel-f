@@ -763,6 +763,17 @@
     };
   }
 
+  /**
+   * Instants such as bookedAt must be converted into the clinic timezone;
+   * LocalDateTime values must not, because they are already wall-clock time.
+   */
+  function formatInstant(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return dateTimeFormatter.format(date);
+  }
+
   function money(value) {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return "—";
@@ -3420,7 +3431,7 @@
     if (number) number.textContent = "#" + appointment.appointmentNumber;
     if (created) {
       created.textContent = appointment.bookedAt
-        ? formatDateTime(appointment.bookedAt)
+        ? formatInstant(appointment.bookedAt)
         : "just now";
     }
     if (estimate) {
@@ -3686,7 +3697,7 @@
               .filter(Boolean)
               .join(" "),
             appointment.bookedAt
-              ? "Booked " + formatDateTime(appointment.bookedAt)
+              ? "Booked " + formatInstant(appointment.bookedAt)
               : "",
             allocation.range !== "—"
               ? "Slot " + allocation.range + " · finishes " + allocation.finish
