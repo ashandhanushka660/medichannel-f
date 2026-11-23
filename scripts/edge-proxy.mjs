@@ -95,9 +95,10 @@ function proxyHttp(request, response) {
   request.pipe(upstream);
 }
 
-function writeUpgradeResponse(clientSocket, upstreamResponse, head) {
-  const statusLine = `HTTP/1.1 ${upstreamResponse.statusCode || 101} ${
-    upstreamResponse.statusMessage || "Switching Protocols"
+function writeResponseToSocket(clientSocket, upstreamResponse) {
+  const statusCode = upstreamResponse.statusCode || 502;
+  const statusLine = `HTTP/1.1 ${statusCode} ${
+    upstreamResponse.statusMessage || http.STATUS_CODES[statusCode] || "Bad Gateway"
   }\r\n`;
   let headerLines = "";
   for (let i = 0; i < upstreamResponse.rawHeaders.length; i += 2) {
@@ -106,7 +107,6 @@ function writeUpgradeResponse(clientSocket, upstreamResponse, head) {
     headerLines += `${name}: ${value}\r\n`;
   }
   clientSocket.write(statusLine + headerLines + "\r\n");
-  if (head && head.length) clientSocket.write(head);
 }
 
 function proxyUpgrade(request, clientSocket, head) {
@@ -125,10 +125,19 @@ function proxyUpgrade(request, clientSocket, head) {
   });
 
   upstream.on("upgrade", (upstreamResponse, upstreamSocket, upstreamHead) => {
-    writeUpgradeResponse(clientSocket, upstreamResponse, upstreamHead);
+    writeResponseToSocket(clientSocket, upstreamResponse);
+    if (upstreamHead && upstreamHead.length) clientSocket.write(upstreamHead);
     if (head && head.length) upstreamSocket.write(head);
     upstreamSocket.pipe(clientSocket);
     clientSocket.pipe(upstreamSocket);
+  });
+
+  // A rejected origin is returned as a normal HTTP response (usually 403),
+  // not as an upgrade event. Relay it so the client sees the real status.
+  upstream.on("response", (upstreamResponse) => {
+    writeResponseToSocket(clientSocket, upstreamResponse);
+    upstreamResponse.pipe(clientSocket, { end: false });
+    upstreamResponse.on("end", () => clientSocket.end());
   });
 
   upstream.on("error", (error) => {
