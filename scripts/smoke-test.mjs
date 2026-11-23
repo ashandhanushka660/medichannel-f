@@ -250,6 +250,13 @@ async function main() {
       "sitemap uses the canonical production URL"
     );
 
+    const directory = await request("/api/backend/public/doctors");
+    assert(
+      directory.response.status === 200 &&
+        Array.isArray(JSON.parse(directory.text || "[]")),
+      "public guest doctor directory is reachable"
+    );
+
     const sessions = await request("/api/backend/sessions");
     assert(
       sessions.response.status === 200,

@@ -583,6 +583,18 @@
     sessions: [],
     sessionQueues: {},
     sessionQueuePoll: null,
+    directory: {
+      items: [],
+      loaded: false,
+      loading: false,
+      poll: null,
+      filters: {
+        q: "",
+        specialisationId: "",
+        availability: "",
+        consultationType: "",
+      },
+    },
     selectedSession: null,
     booking: null,
     appointments: [],
@@ -1016,6 +1028,12 @@
       };
     }
 
+    // Guests explore the hospital roster first. The session/booking
+    // dashboard is reached after registration or login.
+    if (id === "index" && !S) {
+      return { id: "doctors", panel: "", consultId: null };
+    }
+
     const allowed = ACL[id];
 
     if (allowed && !(S && allowed.includes(S.role))) {
@@ -1388,6 +1406,9 @@
       if (activeView === "index") {
         stopSessionQueuePolling();
       }
+      if (activeView === "doctors") {
+        stopDirectoryPolling();
+      }
       if (activeView === "consult") {
         stopConsultationStatusPolling();
         unsubscribe("chat");
@@ -1478,6 +1499,12 @@
   }
 
   function enterView(id) {
+    if (id === "doctors") {
+      void loadSpecialisations();
+      startDirectoryPolling();
+      return;
+    }
+
     if (id === "index") {
       void prepareSearch();
       return;
@@ -1829,24 +1856,28 @@
   // ---------------------------------------------------------------
 
   async function loadSpecialisations() {
-    const select = $("index-sp");
-    if (!select || state.specialisationsLoaded) return;
+    const selects = ["index-sp", "directory-sp"]
+      .map((id) => $(id))
+      .filter(Boolean);
+    if (!selects.length || state.specialisationsLoaded) return;
 
     try {
       const list = await MC.specialisations();
       if (!Array.isArray(list)) throw new Error("Unexpected response");
 
-      const current = select.value;
-      select.replaceChildren(el("option", "", "All specialisations"));
-      select.firstChild.value = "";
+      selects.forEach((select) => {
+        const current = select.value;
+        select.replaceChildren(el("option", "", "All specialisations"));
+        select.firstChild.value = "";
 
-      list.forEach((item) => {
-        const option = el("option", "", item.name);
-        option.value = item.id;
-        select.append(option);
+        list.forEach((item) => {
+          const option = el("option", "", item.name);
+          option.value = item.id;
+          select.append(option);
+        });
+
+        if (current) select.value = current;
       });
-
-      if (current) select.value = current;
       state.specialisationsLoaded = true;
     } catch {
       // Search still works without the filter.
@@ -2620,6 +2651,253 @@
       state.publicNotices = [];
       state.publicNoticesLoaded = true;
       renderPublicNotices([]);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Guest doctor directory
+  // ---------------------------------------------------------------
+
+  function directoryFilters() {
+    const q = $("directory-q");
+    const specialisation = $("directory-sp");
+    const availability = $("directory-availability");
+    const type = $("directory-type");
+
+    state.directory.filters = {
+      q: q ? q.value.trim().toLowerCase() : "",
+      specialisationId: specialisation ? specialisation.value : "",
+      availability: availability ? availability.value : "",
+      consultationType: type ? type.value : "",
+    };
+    return state.directory.filters;
+  }
+
+  function directoryAvailability(doctor) {
+    if (!doctor.available) return ["Unavailable", "red"];
+    if (doctor.sessionStatus === "IN_PROGRESS") return ["Attending now", "green"];
+    if (doctor.sessionStatus === "OPEN") return ["Accepting bookings", "blue"];
+    if (doctor.sessionStatus === "SCHEDULED") return ["Scheduled today", "blue"];
+    return ["Available", "green"];
+  }
+
+  function directoryAttendance(doctor) {
+    if (!doctor.consultationType) return "Not attending right now";
+    const mode = doctor.consultationType === "ONLINE" ? "Online" : "Physical";
+    if (doctor.sessionStatus === "IN_PROGRESS") return mode + " · in consultation";
+    if (doctor.sessionStatus === "OPEN") return mode + " · ready for patients";
+    if (doctor.sessionStatus === "SCHEDULED") return mode + " · scheduled";
+    return mode;
+  }
+
+  function filteredDirectoryItems() {
+    const filters = state.directory.filters;
+
+    return (state.directory.items || []).filter((doctor) => {
+      if (!doctor) return false;
+
+      if (
+        filters.q &&
+        !doctorDisplayName(doctor).toLowerCase().includes(filters.q) &&
+        !String(doctor.specialisation || "").toLowerCase().includes(filters.q)
+      ) {
+        return false;
+      }
+
+      if (
+        filters.specialisationId &&
+        String(doctor.specialisationId || "") !== filters.specialisationId
+      ) {
+        return false;
+      }
+
+      if (filters.availability === "available" && !doctor.available) {
+        return false;
+      }
+      if (filters.availability === "unavailable" && doctor.available) {
+        return false;
+      }
+
+      if (
+        filters.consultationType &&
+        String(doctor.consultationType || "") !== filters.consultationType
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  function renderDoctorDirectory() {
+    const list = document.querySelector("[data-directory-list]");
+    if (!list) return;
+
+    const status = document.querySelector("[data-directory-status]");
+    const items = filteredDirectoryItems();
+    list.replaceChildren();
+
+    if (status) {
+      status.hidden = items.length > 0;
+      status.textContent = items.length
+        ? ""
+        : state.directory.items.length
+          ? "No doctors match these filters. Try another name or specialisation."
+          : "No doctors are published yet. Please check back shortly.";
+    }
+
+    items.forEach((doctor) => {
+      const card = el(
+        "article",
+        "bg-white border border-line rounded-xl p-5 shadow-sm grid gap-4 content-start"
+      );
+      card.dataset.doctorDirectoryCard = doctor.doctorId || "";
+
+      const heading = el("div", "flex flex-wrap items-start gap-3 justify-between");
+      const identity = el("div", "min-w-0 grid gap-1");
+      identity.append(
+        el("h3", "text-lg font-bold text-ink", doctorDisplayName(doctor))
+      );
+      identity.append(
+        el(
+          "p",
+          "text-sm text-slate2",
+          doctor.specialisation || "General"
+        )
+      );
+      const availability = directoryAvailability(doctor);
+      heading.append(identity, badge(availability[0], availability[1]));
+
+      const facts = el("dl", "grid gap-3 sm:grid-cols-2 text-sm");
+      const fact = (label, value) => {
+        const row = el("div", "rounded-lg bg-snow p-3 grid gap-0.5");
+        row.append(el("dt", "text-xs font-semibold uppercase tracking-wide text-mute", label));
+        row.append(el("dd", "font-semibold text-ink", value));
+        return row;
+      };
+
+      const room = doctor.roomNumber
+        ? "Room " + doctor.roomNumber +
+          (doctor.roomName ? " · " + doctor.roomName : "")
+        : "Allocated per session";
+
+      const hours = formatTime(doctor.defaultStartTime) +
+        "–" + formatTime(doctor.defaultEndTime) +
+        " · " + (doctor.defaultHours || 8) + " hours";
+      const sessionHours = doctor.startTime && doctor.endTime
+        ? "Session " + formatTime(doctor.startTime) +
+          "–" + formatTime(doctor.endTime)
+        : "";
+
+      facts.append(
+        fact("Room", room),
+        fact("Consultation fee", money(doctor.consultationFee)),
+        fact("Clinic hours", hours + (sessionHours ? " · " + sessionHours : "")),
+        fact("Attending", directoryAttendance(doctor))
+      );
+
+      const queue = el(
+        "div",
+        "rounded-lg border border-brand/20 bg-brand/5 p-4 grid grid-cols-3 gap-3 text-center"
+      );
+      const queueStat = (label, value) => {
+        const cell = el("div", "grid gap-1");
+        cell.append(el("span", "text-[11px] font-semibold uppercase tracking-wide text-mute", label));
+        cell.append(el("strong", "text-lg text-ink", value));
+        return cell;
+      };
+      queue.append(
+        queueStat("Now serving", doctor.nowServing ? "#" + doctor.nowServing : "—"),
+        queueStat("Next number", doctor.nextNumber ? "#" + doctor.nextNumber : "—"),
+        queueStat("Spots left", doctor.remainingAppointments != null
+          ? String(doctor.remainingAppointments)
+          : "—")
+      );
+
+      card.append(heading, facts, queue);
+
+      const actions = el("div", "flex flex-wrap gap-2 pt-1");
+      if (S && S.role === "CUSTOMER") {
+        const sessions = el(
+          "a",
+          "inline-flex items-center justify-center rounded-lg min-h-10 px-4 py-2 text-sm font-semibold bg-brand text-white hover:bg-brand-d",
+          "Find a session"
+        );
+        sessions.href = "#index";
+        if (doctor.doctorId) sessions.dataset.directoryDoctor = doctor.doctorId;
+        actions.append(sessions);
+      } else if (!S) {
+        const login = el(
+          "a",
+          "inline-flex items-center justify-center rounded-lg min-h-10 px-4 py-2 text-sm font-semibold bg-peach text-white hover:bg-peach-d",
+          "Log in to book"
+        );
+        login.href = "#login";
+        const register = el(
+          "a",
+          "inline-flex items-center justify-center rounded-lg min-h-10 px-4 py-2 text-sm font-semibold border border-brand text-brand hover:bg-snow",
+          "Register"
+        );
+        register.href = "#register";
+        if (doctor.doctorId) {
+          login.dataset.directoryDoctor = doctor.doctorId;
+          register.dataset.directoryDoctor = doctor.doctorId;
+        }
+        actions.append(login, register);
+      }
+      card.append(actions);
+      list.append(card);
+    });
+  }
+
+  async function loadDoctorDirectory(options) {
+    const settings = options || {};
+    if (state.directory.loading && !settings.force) return;
+
+    const status = document.querySelector("[data-directory-status]");
+    state.directory.loading = true;
+
+    if (!settings.silent && status) {
+      status.hidden = false;
+      status.textContent = "Loading hospital doctors…";
+      status.classList.remove("text-bad");
+    }
+
+    try {
+      const list = await MC.doctorDirectory();
+      if (!Array.isArray(list)) throw new Error("Unexpected response");
+
+      state.directory.items = list;
+      state.directory.loaded = true;
+      if (status) status.classList.remove("text-bad");
+      preserveScroll(renderDoctorDirectory);
+    } catch (error) {
+      state.directory.items = [];
+      renderDoctorDirectory();
+      if (status) {
+        status.hidden = false;
+        status.classList.add("text-bad");
+        status.textContent = error && error.message
+          ? error.message
+          : "Unable to load the doctor directory right now.";
+      }
+    } finally {
+      state.directory.loading = false;
+    }
+  }
+
+  function startDirectoryPolling() {
+    stopDirectoryPolling();
+    void loadDoctorDirectory();
+    state.directory.poll = setInterval(() => {
+      if (activeView === "doctors") void loadDoctorDirectory({ silent: true });
+    }, 15000);
+  }
+
+  function stopDirectoryPolling() {
+    if (state.directory.poll) {
+      clearInterval(state.directory.poll);
+      state.directory.poll = null;
     }
   }
 
@@ -9319,6 +9597,33 @@
       void loadSessions();
     });
   }
+
+  const directoryForm = document.querySelector('form[aria-label="Search doctors"]');
+  if (directoryForm) {
+    directoryForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      directoryFilters();
+      renderDoctorDirectory();
+    });
+  }
+
+  // Keep the public roster connected to the existing session dashboard:
+  // following a doctor's login/register/session link pre-fills that doctor's
+  // name in the session search. Booking itself is unchanged.
+  document.addEventListener("click", (event) => {
+    const link =
+      event.target.closest && event.target.closest("[data-directory-doctor]");
+    if (!link) return;
+
+    const doctor = (state.directory.items || []).find(
+      (item) => item && item.doctorId === link.dataset.directoryDoctor
+    );
+    const name = doctor
+      ? [doctor.firstName, doctor.lastName].filter(Boolean).join(" ")
+      : "";
+    const query = $("index-q");
+    if (name && query) query.value = name;
+  });
 
   const consultRefresh = document.querySelector("[data-consult-refresh]");
   if (consultRefresh) {

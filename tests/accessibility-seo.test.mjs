@@ -23,8 +23,8 @@ test("skip link and route announcer are present", () => {
 });
 
 test("notification disclosure state is exposed and maintained", () => {
-  assert.equal((HTML.match(/aria-expanded="false"/g) || []).length, 7);
-  assert.equal((HTML.match(/aria-haspopup="true"/g) || []).length, 7);
+  assert.equal((HTML.match(/aria-expanded="false"/g) || []).length, 8);
+  assert.equal((HTML.match(/aria-haspopup="true"/g) || []).length, 8);
   assert.match(APP, /function closeNotificationPopovers\(\)/);
   assert.match(APP, /bellBtn\.setAttribute\("aria-expanded", String\(!popover\.hidden\)\)/);
 });
@@ -41,7 +41,7 @@ test("all versioned static assets share one cache-busting version", () => {
     ...HTML.matchAll(/\/(?:vendor\/mediclinic-tailwind\.css|images\/hero-doctor-1000\.jpg|mediclinic-(?:api|manager|app)\.js)\?v=([^"']+)/g),
   ].map((match) => match[1]);
   assert.equal(versions.length, 5, "expected five versioned static assets");
-  assert.deepEqual([...new Set(versions)], ["20261123m"]);
+  assert.deepEqual([...new Set(versions)], ["20261123o"]);
 });
 
 test("corrected contrast tokens are reflected in the generated CSS", () => {

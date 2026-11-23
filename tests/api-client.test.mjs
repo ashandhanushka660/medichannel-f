@@ -118,6 +118,14 @@ test("the signed-in doctor reads their own profile for the dashboard greeting", 
   assert.equal(calls[0].settings.method, "GET");
 });
 
+test("guest doctor directory uses the public roster endpoint", async () => {
+  const { MC, calls } = loadApi();
+  await MC.doctorDirectory();
+
+  assert.equal(calls[0].url, "/api/backend/public/doctors");
+  assert.equal(calls[0].settings.method, "GET");
+});
+
 test("doctor feedback uses the doctor's public reviews endpoint", async () => {
   const { MC, calls } = loadApi();
   await MC.doctorReviews("doctor-1");

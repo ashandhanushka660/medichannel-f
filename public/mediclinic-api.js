@@ -211,6 +211,11 @@
       return request("doctors" + query(filters));
     },
 
+    // Guest dashboard roster with room, fee, clinic hours and live queue.
+    doctorDirectory() {
+      return request("public/doctors");
+    },
+
     specialisations() {
       return request("specialisations");
     },
