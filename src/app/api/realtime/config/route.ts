@@ -1,5 +1,5 @@
 import { connection, NextResponse } from "next/server";
-import { getBackendUrl } from "@/lib/backend-url";
+import { getPublicBackendUrl } from "@/lib/backend-url";
 
 /**
  * Tells the browser where the STOMP endpoint lives. The REST API is
@@ -12,7 +12,7 @@ import { getBackendUrl } from "@/lib/backend-url";
 export async function GET() {
   await connection();
 
-  const apiUrl = getBackendUrl();
+  const apiUrl = getPublicBackendUrl();
 
   try {
     const url = new URL(apiUrl);

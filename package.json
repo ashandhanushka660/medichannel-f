@@ -10,6 +10,7 @@
     "build": "next build",
     "build:static-css": "tailwindcss -c tailwind.static.config.js -i styles/mediclinic-tailwind.css -o public/vendor/mediclinic-tailwind.css --minify",
     "start": "next start",
+    "start:edge": "node scripts/edge-proxy.mjs",
     "lint": "eslint",
     "test": "node --test tests/*.test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs"

@@ -7,8 +7,8 @@
 **Brief issue:** 5 November 2026  
 **Deadline:** 5 December 2026  
 **Submission date:** 23 November 2026  
-**Live frontend:** https://else-three-interest-cast.trycloudflare.com/  
-**Live backend health:** https://outreach-flights-segments-sol.trycloudflare.com/actuator/health  
+**Live frontend:** https://app.medichannel.dpdns.org/  
+**Live backend health:** https://app.medichannel.dpdns.org/actuator/health  
 
 ---
 
@@ -36,7 +36,7 @@ The table below maps the main brief areas to the implemented components.
 | Encryption | AES-256-GCM, HMAC-SHA256 lookup, bcrypt | `DataProtectionService.java`, DB columns |
 | BR-01–BR-11 | Booking, payment, cancellation, queue, consultation, deletion rules | `AppointmentService.java`, `SessionQueueService.java` |
 | RT-01–RT-04 | Queue updates, availability, chat/typing, notifications | WebSocket services and frontend listeners |
-| Free hosting / live demo | VPS, Docker Compose, Cloudflare HTTPS quick tunnels | Live frontend URL above |
+| Free hosting / live demo | VPS, Docker Compose, Cloudflare named tunnel | Live frontend URL above |
 | Documentation | Audit, security, deployment, testing, traceability, this report | `docs/**` |
 | Version control | Frontend 104+ commits, backend 40+ commits | Git history |
 
@@ -56,7 +56,7 @@ The frontend is a Next.js 16.4.5 application using React 19 and the App Router. 
 - CSP/HSTS/security headers generated from runtime environment configuration;
 - a visually exact replica of the reference static UI so the user experience is identical to the existing Vercel frontend.
 
-The browser loads the twin static UI from `/mediclinic-system.html`, with API calls proxied through Next.js BFF routes. WebSockets connect directly to the backend HTTPS tunnel using the public `wss://` URL from `/api/realtime/config`.
+The browser loads the twin static UI from `/mediclinic-system.html`, with API calls proxied through Next.js BFF routes. WebSockets connect through the same Cloudflare HTTPS hostname using `wss://app.medichannel.dpdns.org/ws`, published by `/api/realtime/config`.
 
 ### 3.2 Backend
 
@@ -75,12 +75,12 @@ PostgreSQL stores users, doctors, specialisations, sessions, appointments, consu
 
 ### 3.4 Deployment
 
-The backend runs in Docker Compose on the VPS. The frontend runs as a production Next.js server on port 3000. Cloudflare quick tunnels provide HTTPS URLs for both frontend and backend. The backend accepts only exact origins from `APP_FRONTEND_ORIGIN`:
+The backend runs in Docker Compose on the VPS. A local edge proxy on port 3000 fronts the production Next.js server on port 3001 and routes `/api/v1`, `/actuator`, and `/ws` to the backend. A Cloudflare named tunnel provides the permanent HTTPS hostname. The backend accepts only exact origins from `APP_FRONTEND_ORIGIN`:
 
 ```text
 http://34.80.137.3:3000
 https://medichannel-f.vercel.app
-https://else-three-interest-cast.trycloudflare.com
+https://app.medichannel.dpdns.org
 ```
 
 The wildcard `https://*.vercel.app` origin was deliberately removed after security review.
@@ -199,7 +199,7 @@ The current live deployment uses:
 - database: PostgreSQL container;
 - migrations: Flyway on application startup.
 
-Cloudflare quick tunnels are suitable for immediate browser-accessible demonstration but are temporary. For a permanent production deployment, a named Cloudflare tunnel with a stable custom domain is recommended.
+A Cloudflare named tunnel provides the permanent browser-accessible HTTPS hostname. API, actuator and WebSocket paths are routed to the backend by a local edge proxy.
 
 ---
 
@@ -221,13 +221,13 @@ Cloudflare quick tunnels are suitable for immediate browser-accessible demonstra
 
 **Final evidence-based total: 94 / 100.**
 
-This is the final evidence-based mark after the complete remediation, redeployment and verification cycle. The remaining deduction is mainly because the presentation/Q&A has not yet been observed and because Cloudflare quick-tunnel URLs are temporary rather than a named custom domain.
+This is the final evidence-based mark after the complete remediation, redeployment and verification cycle. The remaining deduction is mainly because the live presentation/Q&A and OBS recording have not yet been observed.
 
 ---
 
 ## 11. Known constraints
 
-- Cloudflare quick tunnel URLs change if the tunnel process restarts.
+- The Cloudflare named tunnel is active on `app.medichannel.dpdns.org` and runs as a systemd service.
 - Flyway migrations V17–V20, the email backfill, audit immutability and all live checks have now been verified after redeployment.
 - The static twin UI remains the default landing experience because visual identity with the provided Vercel app is a user requirement; the surrounding Next.js App Router routes, BFF routes, and role workspaces are still present and functional.
 - Presentation and Q&A performance cannot be scored before the actual session.

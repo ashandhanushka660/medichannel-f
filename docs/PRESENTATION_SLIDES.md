@@ -38,7 +38,7 @@ Booking rules enforce time windows, capacity, payment, cancellation, arrival, co
 Real-time features cover queue, availability, chat/typing, called notifications, and three-away reminders.
 
 ## Slide 8 — Live demo path
-1. Open https://else-three-interest-cast.trycloudflare.com/
+1. Open https://app.medichannel.dpdns.org/
 2. Log in as patient, view doctors/sessions, book appointment
 3. Manager creates session and records arrival/payment
 4. Doctor starts session, calls patient, opens chat
