@@ -19,7 +19,7 @@ module.exports = {
         line: "#E2E8F0",
         ink: "#1A202C",
         slate2: "#4A5568",
-        mute: "#718096",
+        mute: "#52637A",
       },
     },
   },

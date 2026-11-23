@@ -1258,7 +1258,9 @@
 
       const footer = document.querySelector("footer");
       if (footer) {
-        footer.hidden = ["login", "register"].includes(targetId);
+        footer.hidden =
+          document.body.dataset.appReady !== "true" ||
+          ["login", "register"].includes(targetId);
       }
 
       if (targetId === "login" && flash) {
@@ -1349,10 +1351,6 @@
       void loadManagerSessionPicker();
       void loadManagerSessions();
     } else if (id === "welcome") {
-      void loadPublicNotices();
-    }
-
-    if (id === "welcome") {
       void loadPublicNotices();
     }
 
@@ -5516,20 +5514,20 @@
           if (isActionable) {
             const editBtn = isDeleted
               ? ""
-              : `<button type="button" data-edit-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Edit</button>`;
+              : `<button type="button" data-edit-user="${escapeHtml(member.userId)}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Edit</button>`;
             const toggleBtn = (isDeleted || isSelf)
               ? ""
               : isActive
-                ? `<button type="button" data-toggle-user="${member.userId}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
-                : `<button type="button" data-toggle-user="${member.userId}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
+                ? `<button type="button" data-toggle-user="${escapeHtml(member.userId)}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
+                : `<button type="button" data-toggle-user="${escapeHtml(member.userId)}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
             const canResetPassword =
               member.role === "DOCTOR" || member.role === "MANAGER";
             const resetBtn = (isDeleted || isSelf || !canResetPassword)
               ? ""
-              : `<button type="button" data-reset-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Reset password</button>`;
+              : `<button type="button" data-reset-user="${escapeHtml(member.userId)}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Reset password</button>`;
             const deleteBtn = (isDeleted || isSelf)
               ? ""
-              : `<button type="button" data-delete-user="${member.userId}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 min-h-8 px-2.5 py-1 text-xs">Delete</button>`;
+              : `<button type="button" data-delete-user="${escapeHtml(member.userId)}" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 min-h-8 px-2.5 py-1 text-xs">Delete</button>`;
             actionHtml = `<td data-label="Actions"><div class="flex flex-wrap gap-1.5">${editBtn}${toggleBtn}${resetBtn}${deleteBtn}</div></td>`;
           }
 
@@ -5868,7 +5866,7 @@
           '<td data-label="Name">' + escapeHtml(r.name || "—") + '</td>' +
           '<td data-label="Location">' + escapeHtml(r.location || "Hospital Main Building") + '</td>' +
           '<td data-label="Type">' + typeBadge + '</td>' +
-          '<td data-label="Capacity">' + (r.capacity || 1) + '</td>';
+          '<td data-label="Capacity">' + (Number(r.capacity) || 1) + '</td>';
         tbody.append(tr);
       });
     } catch (err) {
@@ -7387,7 +7385,7 @@
 
     const style = document.createElement("style");
     style.textContent =
-      "body{font:14px system-ui,sans-serif;margin:32px;color:#1a202c}h1{font-size:20px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#718096;margin-top:20px}";
+      "body{font:14px system-ui,sans-serif;margin:32px;color:#1a202c}h1{font-size:20px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#52637A;margin-top:20px}";
 
     const body = printWindow.document.body;
     body.replaceChildren();
