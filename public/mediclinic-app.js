@@ -593,6 +593,7 @@
     sessionsLoading: false,
     sessions: [],
     sessionQueues: {},
+    sessionWeeks: [],
     searchPeriod: "",
     sessionQueuePoll: null,
     directory: {
@@ -702,6 +703,100 @@
   function formatTime(value) {
     if (!value) return "—";
     return String(value).slice(0, 5);
+  }
+
+  // ---------------------------------------------------------------
+  // Week-based session discovery
+  // ---------------------------------------------------------------
+
+  const MAX_SESSION_RANGE_WEEKS = 26; // six months, one week at a time
+
+  function parseISODate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) return null;
+    const date = new Date(
+      Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function addISODays(value, days) {
+    const date = parseISODate(value);
+    if (!date) return value;
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function sessionRangeOptions() {
+    const milestones = {
+      1: "Next week",
+      2: "Next two weeks",
+      3: "Next three weeks",
+      4: "Next month (4 weeks)",
+      8: "Next two months",
+      12: "Next three months",
+      16: "Next four months",
+      20: "Next five months",
+      26: "Next six months",
+    };
+    return Array.from({ length: MAX_SESSION_RANGE_WEEKS }, (_, index) => {
+      const weeks = index + 1;
+      return {
+        weeks,
+        label: milestones[weeks] || "Next " + weeks + " weeks",
+      };
+    });
+  }
+
+  function sessionSearchRange(startDate, rangeValue) {
+    const start = parseISODate(startDate) ? startDate : todayISO();
+    const parsed = Number.parseInt(rangeValue, 10);
+    const weeks = Number.isFinite(parsed)
+      ? Math.min(MAX_SESSION_RANGE_WEEKS, Math.max(1, parsed))
+      : 1;
+    return {
+      from: start,
+      to: addISODays(start, weeks * 7 - 1),
+      weeks,
+    };
+  }
+
+  // A "week" is the seven days starting on the chosen date, so 11/24/2026
+  // covers 11/24–11/30 and 12/1/2026 covers 12/1–12/7.
+  function sessionWeekChunks(startDate, weeks) {
+    const chunks = [];
+    for (let index = 0; index < weeks; index += 1) {
+      const from = addISODays(startDate, index * 7);
+      const to = addISODays(from, 6);
+      chunks.push({
+        index: index + 1,
+        from,
+        to,
+        label:
+          "Week " +
+          (index + 1) +
+          " · " +
+          formatDate(from) +
+          " – " +
+          formatDate(to),
+      });
+    }
+    return chunks;
+  }
+
+  function populateSessionRangeSelects() {
+    ["index-range", "manager-session-range"].forEach((id) => {
+      const select = $(id);
+      if (!select || select.dataset.rangeReady === "true") return;
+      select.replaceChildren();
+      sessionRangeOptions().forEach((option) => {
+        const node = el("option", "", option.label);
+        node.value = String(option.weeks);
+        select.append(node);
+      });
+      select.value = "1";
+      select.dataset.rangeReady = "true";
+    });
   }
 
   /**
@@ -2003,6 +2098,7 @@
   async function prepareSearch() {
     const dateInput = $("index-dt");
     if (dateInput && !dateInput.value) dateInput.value = todayISO();
+    populateSessionRangeSelects();
 
     enhanceIndexDashboard();
     await loadSpecialisations();
@@ -2054,7 +2150,16 @@
     const heading = document.querySelector("[data-session-heading]");
     const filters = currentFilters();
     const period = periodLabel(filters.period);
+    const rangeSelect = $("index-range");
+    const range = sessionSearchRange(filters.date, rangeSelect ? rangeSelect.value : "1");
+    const requestFilters = {
+      ...filters,
+      date: "",
+      from: range.from,
+      to: range.to,
+    };
     state.searchPeriod = filters.period;
+    state.sessionWeeks = sessionWeekChunks(range.from, range.weeks);
 
     state.sessionsLoading = true;
 
@@ -2067,21 +2172,24 @@
     if (list) list.replaceChildren();
 
     try {
-      const sessionResponse = await MC.sessions(filters);
+      const sessionResponse = await MC.sessions(requestFilters);
       if (!Array.isArray(sessionResponse)) throw new Error("Unexpected response");
       let sessions = bookableSessions(sessionResponse);
 
       let fallbackNotice = "";
-      // If filtering by date returned 0 sessions, fall back to all upcoming sessions
-      // so the patient is never stranded on an empty screen.
-      if (sessions.length === 0 && filters.date) {
+      // Keep the no-dead-end fallback: with no sessions in the chosen window,
+      // show the next available sessions and label them as outside the range.
+      if (sessions.length === 0) {
         try {
           const allUpcoming = bookableSessions(
-            await MC.sessions({ ...filters, date: "" })
+            await MC.sessions({ ...filters, date: "", from: "", to: "" })
           );
           if (allUpcoming.length > 0) {
-            sessions = allUpcoming;
-            fallbackNotice = `No sessions match for ${formatDate(filters.date)}${period ? " in " + period : ""}. Showing all upcoming sessions:`;
+            // The full roster spans six months; keep the no-dead-end fallback
+            // bounded so a past or empty week never renders thousands of cards.
+            sessions = allUpcoming.slice(0, 120);
+            state.sessionWeeks = [];
+            fallbackNotice = `No sessions for ${formatDate(range.from)} – ${formatDate(range.to)}${period ? " in " + period : ""}. Showing the next available sessions:`;
           }
         } catch {
           // keep original empty sessions
@@ -2095,11 +2203,14 @@
         if (fallbackNotice) {
           heading.textContent = fallbackNotice;
         } else {
-          const day = filters.date ? formatDate(filters.date) : "all dates";
+          const rangeLabel =
+            formatDate(range.from) + " – " + formatDate(range.to);
           heading.textContent =
             sessions.length +
-            (sessions.length === 1 ? " session on " : " sessions on ") +
-            day +
+            (sessions.length === 1 ? " session across " : " sessions across ") +
+            range.weeks +
+            (range.weeks === 1 ? " week · " : " weeks · ") +
+            rangeLabel +
             " · " + CLINIC_WINDOW_LABEL;
         }
       }
@@ -2116,6 +2227,7 @@
       if (activeView === "index") startSessionQueuePolling();
     } catch (error) {
       state.sessionsLoaded = false;
+      state.sessionWeeks = [];
       if (heading) heading.textContent = "Sessions unavailable";
       if (status) {
         status.hidden = false;
@@ -2403,13 +2515,41 @@
 
     if (!state.sessions.length) return;
 
-    state.sessions.forEach((session) => {
-      list.append(
-        renderSessionCard(
-          session,
-          previousStatuses.get(String(session.sessionId))
-        )
-      );
+    const chunks =
+      Array.isArray(state.sessionWeeks) && state.sessionWeeks.length
+        ? state.sessionWeeks
+        : [{ label: "", from: "", to: "" }];
+
+    chunks.forEach((chunk) => {
+      const sessions = chunk.from
+        ? state.sessions.filter((session) => {
+            const date = String(session.sessionDate || "");
+            return date >= chunk.from && date <= chunk.to;
+          })
+        : state.sessions;
+      if (!sessions.length) return;
+
+      if (chunk.label) {
+        list.append(
+          el(
+            "h3",
+            "col-span-full mt-1 text-xs font-bold uppercase tracking-wider text-brand",
+            chunk.label +
+              " · " +
+              sessions.length +
+              (sessions.length === 1 ? " session" : " sessions")
+          )
+        );
+      }
+
+      sessions.forEach((session) => {
+        list.append(
+          renderSessionCard(
+            session,
+            previousStatuses.get(String(session.sessionId))
+          )
+        );
+      });
     });
   }
 
@@ -7755,14 +7895,34 @@
     const dashTbody = document.querySelector("[data-manager-dashboard-sessions-tbody]");
     if (!tbody && !dashTbody) return;
 
+    populateSessionRangeSelects();
+    const dateInput = $("manager-session-date");
+    const rangeSelect = $("manager-session-range");
+    if (dateInput && !dateInput.value) dateInput.value = todayISO();
+    const range = sessionSearchRange(
+      dateInput ? dateInput.value : todayISO(),
+      rangeSelect ? rangeSelect.value : "1"
+    );
+    const rangeLabel = document.querySelector("[data-manager-session-range-label]");
+    if (rangeLabel) {
+      rangeLabel.textContent =
+        formatDate(range.from) +
+        " – " +
+        formatDate(range.to) +
+        " · " +
+        range.weeks +
+        (range.weeks === 1 ? " week" : " weeks") +
+        ", shown week by week";
+    }
+
     // The stat cards are authoritative backend aggregates, not public-feed
     // approximations. Load them independently of the session table.
     void loadManagerDashboard();
 
     try {
-      const sessions = await MC.sessions({});
+      const sessions = await MC.sessions({ from: range.from, to: range.to });
       if (!Array.isArray(sessions) || sessions.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No hospital sessions scheduled yet.</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No hospital sessions scheduled in this period.</td></tr>';
         if (dashTbody) dashTbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No sessions scheduled for today.</td></tr>';
         return;
       }
@@ -7847,7 +8007,32 @@
 
       if (tbody) {
         tbody.replaceChildren();
-        sessions.forEach((s) => tbody.append(renderRow(s)));
+        const groupedIds = new Set();
+        sessionWeekChunks(range.from, range.weeks).forEach((chunk) => {
+          const group = sessions.filter((s) => {
+            const date = String(s.sessionDate || "");
+            return date >= chunk.from && date <= chunk.to;
+          });
+          if (!group.length) return;
+
+          const header = document.createElement("tr");
+          header.innerHTML =
+            '<td colspan="8" class="bg-snow px-3 py-2 text-xs font-bold uppercase tracking-wider text-brand">' +
+            escapeHtml(chunk.label) +
+            " · " +
+            group.length +
+            (group.length === 1 ? " session" : " sessions") +
+            "</td>";
+          tbody.append(header);
+          group.forEach((s) => {
+            groupedIds.add(s.sessionId || s.id);
+            tbody.append(renderRow(s));
+          });
+        });
+
+        sessions
+          .filter((s) => !groupedIds.has(s.sessionId || s.id))
+          .forEach((s) => tbody.append(renderRow(s)));
       }
 
       if (dashTbody) {
@@ -9893,6 +10078,20 @@
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.id === "index-range") {
+      state.sessionsLoaded = false;
+      void loadSessions();
+      return;
+    }
+
+    if (
+      event.target.id === "manager-session-date" ||
+      event.target.id === "manager-session-range"
+    ) {
+      loadOnce(loadManagerSessions);
+      return;
+    }
+
     if (event.target.id === "doctor-session-select" || event.target.id === "doctor-queue-session-select") {
       const val = event.target.value;
       state.doctor.sessionId = val;

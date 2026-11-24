@@ -190,7 +190,7 @@ test("the booking confirmation keeps showing the allocated queue number", () => 
   );
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261124e"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261124f"/
   );
 });
 
@@ -242,8 +242,8 @@ test("the selected hour is sent to the session search and labelled", () => {
   assert.equal(periodLabel("09:00"), "09:00–10:00");
   assert.equal(periodLabel(""), "");
 
-  assert.match(APP_SOURCE, /MC\.sessions\(filters\)/);
+  assert.match(APP_SOURCE, /MC\.sessions\(requestFilters\)/);
   assert.match(API_SOURCE, /sessions\(filters\) \{\s*return request\("sessions" \+ query\(filters\)\);/);
-  assert.match(APP_SOURCE, /day \+\n\s*" · " \+ CLINIC_WINDOW_LABEL/);
+  assert.match(APP_SOURCE, /rangeLabel \+\n\s*" · " \+ CLINIC_WINDOW_LABEL/);
   assert.match(APP_SOURCE, /const CLINIC_WINDOW_LABEL = CLINIC_START \+ "–" \+ CLINIC_END/);
 });

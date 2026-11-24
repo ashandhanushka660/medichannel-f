@@ -78,6 +78,11 @@ async function main() {
       "dashboard control is present"
     );
     assert(
+      text.includes('id="index-range"') &&
+        text.includes('id="manager-session-range"'),
+      "week-by-week Sessions for selectors are present"
+    );
+    assert(
       !text.includes("bcrypt") && !text.includes("AES-256-GCM"),
       "no unverifiable crypto claims in the frontend"
     );
@@ -262,10 +267,23 @@ async function main() {
       sessions.response.status === 200,
       "public session search is reachable"
     );
-    assert(
-      Array.isArray(JSON.parse(sessions.text || "[]")),
-      "session search returns a list"
-    );
+    const sessionList = JSON.parse(sessions.text || "[]");
+    assert(Array.isArray(sessionList), "session search returns a list");
+
+    if (sessionList.length > 0) {
+      const day = sessionList[0].sessionDate;
+      const ranged = await request(
+        `/api/backend/sessions?from=${day}&to=${day}`
+      );
+      const rangedList = JSON.parse(ranged.text || "[]");
+      assert(
+        ranged.response.status === 200 &&
+          Array.isArray(rangedList) &&
+          rangedList.length > 0 &&
+          rangedList.every((session) => session.sessionDate === day),
+        `inclusive from/to filters sessions to ${day}`
+      );
+    }
 
     const filtered = await request(
       "/api/backend/sessions?q=dr&consultationType=ONLINE"

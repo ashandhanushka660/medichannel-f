@@ -41,7 +41,7 @@ test("all versioned static assets share one cache-busting version", () => {
     ...HTML.matchAll(/\/(?:vendor\/mediclinic-tailwind\.css|images\/hero-doctor-1000\.jpg|mediclinic-(?:api|manager|app)\.js)\?v=([^"']+)/g),
   ].map((match) => match[1]);
   assert.equal(versions.length, 5, "expected five versioned static assets");
-  assert.deepEqual([...new Set(versions)], ["20261124e"]);
+  assert.deepEqual([...new Set(versions)], ["20261124f"]);
 });
 
 test("corrected contrast tokens are reflected in the generated CSS", () => {
