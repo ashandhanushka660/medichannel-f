@@ -62,7 +62,14 @@ function text(value) {
     .join(" ");
 }
 
-const CLINIC_HOURS_LABEL = "07:00–16:00 · 5 min per patient";
+const CLINIC_WINDOWS = [
+  { start: "07:00", end: "09:30", label: "Morning" },
+  { start: "12:00", end: "14:30", label: "Afternoon" },
+];
+const CLINIC_WINDOW_LABEL = "07:00–09:30 or 12:00–14:30";
+const SLOT_MINUTES = 5;
+const MAX_PATIENTS_PER_SESSION = 30;
+const MAX_PATIENTS_PER_DAY = 60;
 
 function makeSessionHarness(session, queue) {
   const document = {
@@ -91,8 +98,15 @@ function makeSessionHarness(session, queue) {
     "bookingClosed",
     "animateStateChange",
     "state",
-    "CLINIC_HOURS_LABEL",
-    `${functionSource("renderSessionCard")}
+    "CLINIC_WINDOWS",
+    "CLINIC_WINDOW_LABEL",
+    "SLOT_MINUTES",
+    "MAX_PATIENTS_PER_SESSION",
+    "MAX_PATIENTS_PER_DAY",
+    `${functionSource("sessionWindow")}
+ ${functionSource("sessionWindowLabel")}
+ ${functionSource("sessionCapacityLabel")}
+ ${functionSource("renderSessionCard")}
 return renderSessionCard;`
   )(
     document,
@@ -106,7 +120,11 @@ return renderSessionCard;`
     () => false,
     () => {},
     state,
-    CLINIC_HOURS_LABEL
+    CLINIC_WINDOWS,
+    CLINIC_WINDOW_LABEL,
+    SLOT_MINUTES,
+    MAX_PATIENTS_PER_SESSION,
+    MAX_PATIENTS_PER_DAY
   );
 
   return renderSessionCard(session);
@@ -120,8 +138,8 @@ const session = {
   specialisation: "Cardiology",
   roomNumber: "A-12",
   sessionDate: "2026-11-24",
-  startTime: "09:00:00",
-  endTime: "12:00:00",
+  startTime: "07:00:00",
+  endTime: "09:30:00",
   consultationType: "PHYSICAL",
   status: "OPEN",
   minutesPerPatient: 5,
@@ -170,8 +188,8 @@ test("session cards show congruent clinic hours and the live queue", () => {
 
   for (const expected of [
     "Dr. Rajini Kanth",
-    "07:00–16:00",
-    "5 min per patient",
+    "Morning 07:00–09:30 · 5 min per patient",
+    "Up to 6 patients · 60 per day across both sessions",
     "Now serving #3",
     "Next #4",
     "Spots left (live)",
@@ -194,7 +212,7 @@ test("the booking confirmation keeps showing the allocated queue number", () => 
   );
 });
 
-test("the booking form offers eight hourly periods from 07:00 to 16:00", () => {
+test("the booking form offers the two published session periods", () => {
   const select = HTML_SOURCE.match(/<select id="index-period"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(select, "the time period select was not found");
 
@@ -204,21 +222,20 @@ test("the booking form offers eight hourly periods from 07:00 to 16:00", () => {
 
   assert.deepEqual(
     options.map((option) => option.value),
-    ["", "07:00", "08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00"]
+    ["", "07:00", "12:00"]
   );
   assert.equal(options[0].label, "All periods");
-  assert.equal(options[1].label, "07:00 – 08:00");
-  assert.equal(options[8].label, "15:00 – 16:00");
-  assert.ok(!options.some((option) => option.value === "12:00"));
-  assert.match(HTML_SOURCE, /<label for="index-period">Time period<\/label>/);
+  assert.equal(options[1].label, "Morning · 07:00 – 09:30");
+  assert.equal(options[2].label, "Afternoon · 12:00 – 14:30");
+  assert.match(HTML_SOURCE, /<label for="index-period">Session period<\/label>/);
 });
 
-test("the selected hour is sent to the session search and labelled", () => {
+test("the selected window is sent to the session search and labelled", () => {
   const values = {
     "index-q": "Wijesinghe",
     "index-sp": "cardiology-id",
     "index-dt": "2026-11-24",
-    "index-period": "09:00",
+    "index-period": "07:00",
     "index-ty": "ONLINE",
   };
   const $ = (id) => ({ value: values[id] || "" });
@@ -232,18 +249,20 @@ test("the selected hour is sent to the session search and labelled", () => {
     q: "Wijesinghe",
     specialisationId: "cardiology-id",
     date: "2026-11-24",
-    period: "09:00",
+    period: "07:00",
     consultationType: "ONLINE",
   });
 
   const periodLabel = new Function(
+    "CLINIC_WINDOWS",
     `${functionSource("periodLabel")}\nreturn periodLabel;`
-  )();
-  assert.equal(periodLabel("09:00"), "09:00–10:00");
+  )(CLINIC_WINDOWS);
+  assert.equal(periodLabel("07:00"), "Morning 07:00–09:30");
+  assert.equal(periodLabel("12:00"), "Afternoon 12:00–14:30");
   assert.equal(periodLabel(""), "");
 
   assert.match(APP_SOURCE, /MC\.sessions\(requestFilters\)/);
   assert.match(API_SOURCE, /sessions\(filters\) \{\s*return request\("sessions" \+ query\(filters\)\);/);
   assert.match(APP_SOURCE, /rangeLabel \+\n\s*" · " \+ CLINIC_WINDOW_LABEL/);
-  assert.match(APP_SOURCE, /const CLINIC_WINDOW_LABEL = CLINIC_START \+ "–" \+ CLINIC_END/);
+  assert.match(APP_SOURCE, /const CLINIC_WINDOW_LABEL =\n\s*MORNING_START \+ "–" \+ MORNING_END/);
 });

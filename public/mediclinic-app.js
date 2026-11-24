@@ -42,16 +42,28 @@
   ];
   const TZ = "Asia/Colombo";
   const CLINIC_UTC_OFFSET = "+05:30";
-  // The published clinic day shared with the guest doctor directory and the
-  // backend booking rules. Patient sessions are only shown when they fit.
+  // The two published consultation windows shared with the guest doctor
+  // directory and the backend booking rules. Only sessions using one of these
+  // exact windows, five-minute slots and at most 30 places are displayed.
   const CLINIC_START = "07:00";
   const CLINIC_END = "16:00";
   const CLINIC_HOURS = 8;
+  const MORNING_START = "07:00";
+  const MORNING_END = "09:30";
+  const AFTERNOON_START = "12:00";
+  const AFTERNOON_END = "14:30";
   const SLOT_MINUTES = 5;
-  const MAX_PATIENTS_PER_SESSION = 60;
+  const MAX_PATIENTS_PER_SESSION = 30;
+  const MAX_PATIENTS_PER_DAY = 60;
   const PHYSICAL_BOOKING_CLOSE_MINUTES = 60;
   const ONLINE_BOOKING_CLOSE_MINUTES = 30;
-  const CLINIC_WINDOW_LABEL = CLINIC_START + "–" + CLINIC_END;
+  const CLINIC_WINDOWS = [
+    { start: MORNING_START, end: MORNING_END, label: "Morning" },
+    { start: AFTERNOON_START, end: AFTERNOON_END, label: "Afternoon" },
+  ];
+  const CLINIC_WINDOW_LABEL =
+    MORNING_START + "–" + MORNING_END + " or " +
+    AFTERNOON_START + "–" + AFTERNOON_END;
   const CLINIC_HOURS_LABEL =
     CLINIC_WINDOW_LABEL + " · " + SLOT_MINUTES + " min per patient";
   const ManagerUI = window.MCManager;
@@ -689,15 +701,45 @@
   }
 
   /**
-   * Human label for one of the eight clinic-hour periods, e.g. 09:00–10:00.
+   * Human label for one of the two published session windows.
    */
   function periodLabel(value) {
     if (!value) return "";
     const start = String(value).slice(0, 5);
-    const hour = Number(start.slice(0, 2));
-    if (!Number.isFinite(hour)) return "";
-    const end = String(hour + 1).padStart(2, "0") + ":00";
-    return start + "–" + end;
+    const match = CLINIC_WINDOWS.find((window) => window.start === start);
+    return match
+      ? match.label + " " + match.start + "–" + match.end
+      : start;
+  }
+
+  function sessionWindow(session) {
+    if (!session) return null;
+    const start = String(session.startTime || "").slice(0, 5);
+    const end = String(session.endTime || "").slice(0, 5);
+    return CLINIC_WINDOWS.find(
+      (window) => window.start === start && window.end === end
+    ) || null;
+  }
+
+  function sessionWindowLabel(session) {
+    const window = sessionWindow(session);
+    if (!window) return CLINIC_WINDOW_LABEL;
+    const minutes = Number(session.minutesPerPatient) || SLOT_MINUTES;
+    return window.label + " " + window.start + "–" + window.end +
+      " · " + minutes + " min per patient";
+  }
+
+  function sessionCapacityLabel(session) {
+    const capacity = Number(session && session.maxAppointments) || MAX_PATIENTS_PER_SESSION;
+    return "Up to " + capacity + " patients · " + MAX_PATIENTS_PER_DAY +
+      " per day across both sessions";
+  }
+
+  function windowEndForStart(start) {
+    const match = CLINIC_WINDOWS.find(
+      (window) => window.start === String(start).slice(0, 5)
+    );
+    return match ? match.end : "";
   }
 
   function formatTime(value) {
@@ -825,7 +867,7 @@
   }
 
   /**
-   * The patient's allocated 5–30 minute slot, derived from the server's live
+   * The patient's allocated five-minute slot, derived from the server's live
    * estimated start time so delays and cancellations are reflected here too.
    */
   function appointmentSlot(value) {
@@ -2326,7 +2368,7 @@
   /**
    * Only sessions for doctors advertised as available on the guest dashboard
    * may be offered to a patient. The backend applies the same rule together
-   * with the 07:00–16:00 / 5–30-minute-slot congruence check.
+   * with the two-window / five-minute-slot congruence check.
    */
   function bookableSessions(sessions) {
     return (Array.isArray(sessions) ? sessions : []).filter(
@@ -2403,7 +2445,8 @@
             range.weeks +
             (range.weeks === 1 ? " week · " : " weeks · ") +
             rangeLabel +
-            " · " + CLINIC_WINDOW_LABEL;
+            " · " + CLINIC_WINDOW_LABEL +
+            " · up to " + MAX_PATIENTS_PER_DAY + " patients/day";
         }
       }
 
@@ -3220,13 +3263,9 @@
           (doctor.roomName ? " · " + doctor.roomName : "")
         : "Allocated per session";
 
-      const hours = formatTime(doctor.defaultStartTime) +
-        "–" + formatTime(doctor.defaultEndTime) +
-        " · " + (doctor.defaultHours || CLINIC_HOURS) + " hours" +
-        " · " + (doctor.minutesPerPatient || SLOT_MINUTES) +
-        " min per patient";
+      const hours = CLINIC_HOURS_LABEL;
       const sessionHours = doctor.startTime && doctor.endTime
-        ? "Session " + formatTime(doctor.startTime) +
+        ? "Next session " + formatTime(doctor.startTime) +
           "–" + formatTime(doctor.endTime)
         : "";
 
@@ -3389,9 +3428,10 @@
       el(
         "span",
         "",
-        CLINIC_HOURS_LABEL
+        sessionWindowLabel(session)
       ),
       el("span", "", formatDate(session.sessionDate)),
+      el("span", "text-xs text-mute", sessionCapacityLabel(session)),
       el("b", "", money(session.feeLkr))
     );
 
@@ -3595,9 +3635,13 @@
     if (title) title.textContent = "Book: " + doctorName(session);
     if (meta) {
       const requested = periodLabel(state.searchPeriod);
+      const closeMinutes = session.consultationType === "PHYSICAL"
+        ? PHYSICAL_BOOKING_CLOSE_MINUTES
+        : ONLINE_BOOKING_CLOSE_MINUTES;
       meta.textContent = [
         formatDate(session.sessionDate),
-        CLINIC_HOURS_LABEL,
+        sessionWindowLabel(session),
+        "Book by " + closeMinutes + " min before start",
         requested ? "Requested " + requested : "",
         session.consultationType === "ONLINE" ? "Online" : "Physical",
         session.roomNumber ? "Room " + session.roomNumber : "Chat room",
@@ -9437,7 +9481,10 @@
     const roomId = consultationType === "PHYSICAL" ? (($("sess-room") || {}).value || null) : null;
     const sessionDate = ($("sess-date") || {}).value || "";
     let startTime = ($("sess-start") || {}).value || "";
-    let endTime = ($("sess-end") || {}).value || "";
+    const selectedWindow = CLINIC_WINDOWS.find(
+      (window) => window.start === startTime
+    );
+    let endTime = selectedWindow ? selectedWindow.end : "";
     const feeLkr = Number(($("sess-fee") || {}).value || 0);
     const maxAppointments = Number(($("sess-max") || {}).value || MAX_PATIENTS_PER_SESSION);
     const minutesPerPatient = Number(($("sess-mins") || {}).value || SLOT_MINUTES);
@@ -9454,25 +9501,24 @@
       setStatus(status, "Please select a session date.", true);
       return;
     }
-    if (!startTime || !endTime) {
-      setStatus(status, "Please provide start and end times.", true);
+    if (!selectedWindow || !endTime) {
+      setStatus(
+        status,
+        "Sessions must use one published window: " + CLINIC_WINDOW_LABEL + ".",
+        true
+      );
       return;
     }
 
-    if (startTime.length === 5) startTime += ":00";
-    if (endTime.length === 5) endTime += ":00";
-
-    if (startTime >= endTime) {
-      setStatus(status, "End time must be after start time.", true);
-      return;
-    }
+    startTime += ":00";
+    endTime += ":00";
 
     if (!Number.isFinite(maxAppointments) || maxAppointments < 1 || maxAppointments > MAX_PATIENTS_PER_SESSION) {
-      setStatus(status, "Maximum patients must be between 1 and " + MAX_PATIENTS_PER_SESSION + " (BR-01).", true);
+      setStatus(status, "Maximum patients must be between 1 and " + MAX_PATIENTS_PER_SESSION + " per session (BR-01).", true);
       return;
     }
-    if (!Number.isFinite(minutesPerPatient) || minutesPerPatient < 5 || minutesPerPatient > 30) {
-      setStatus(status, "Minutes per patient must be between 5 and 30 (BR-01).", true);
+    if (!Number.isFinite(minutesPerPatient) || minutesPerPatient !== SLOT_MINUTES) {
+      setStatus(status, "Each patient must be allocated exactly " + SLOT_MINUTES + " minutes (BR-01).", true);
       return;
     }
     if (!Number.isFinite(feeLkr) || feeLkr <= 0) {
@@ -10657,6 +10703,16 @@
         roomSelect.disabled = false;
       }
     });
+  }
+
+  const sessStart = $("sess-start");
+  if (sessStart) {
+    const syncSessionEnd = () => {
+      const endInput = $("sess-end");
+      if (endInput) endInput.value = windowEndForStart(sessStart.value);
+    };
+    sessStart.addEventListener("change", syncSessionEnd);
+    syncSessionEnd();
   }
 
   // Searchable dropdown interactions. These are delegated so dynamically
