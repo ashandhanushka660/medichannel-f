@@ -1770,11 +1770,12 @@
     });
   }
 
-  function setSession(user) {
+  function setSession(user, token) {
     if (!user || !HOME[user.role]) {
       S = null;
       try { localStorage.removeItem("mc-active-user"); } catch {}
       try { sessionStorage.removeItem("mc_tab_user"); } catch {}
+      try { sessionStorage.removeItem("mc_tab_token"); } catch {}
       if (state.doctor.pollTimer) clearInterval(state.doctor.pollTimer);
       state.doctor.pollTimer = null;
       if (state.patientPollTimer) clearInterval(state.patientPollTimer);
@@ -1799,6 +1800,12 @@
     } catch {}
     try {
       sessionStorage.setItem("mc_tab_user", JSON.stringify(user));
+      // The login/register routes return the REST token instead of issuing a
+      // cookie. Persist it for this tab so every subsequent API call carries
+      // the Bearer credential the tab-bound BFF requires.
+      if (typeof token === "string" && token) {
+        sessionStorage.setItem("mc_tab_token", token);
+      }
     } catch {}
 
     state.consult.appointmentId = null;
@@ -9307,12 +9314,17 @@
         return;
       }
 
-      if (!result.user || !HOME[result.user.role]) {
+      if (
+        !result.user ||
+        !HOME[result.user.role] ||
+        typeof result.token !== "string" ||
+        !result.token
+      ) {
         showErr("login-err", "The login service returned an unexpected response.");
         return;
       }
 
-      setSession(result.user);
+      setSession(result.user, result.token);
       form.reset();
       render();
 
@@ -9387,8 +9399,13 @@
         return;
       }
 
-      if (result.user && HOME[result.user.role]) {
-        setSession(result.user);
+      if (
+        result.user &&
+        HOME[result.user.role] &&
+        typeof result.token === "string" &&
+        result.token
+      ) {
+        setSession(result.user, result.token);
         form.reset();
         render();
         nav(HOME[result.user.role]);
@@ -10360,6 +10377,9 @@
     // ignored, so a new browsing context always opens as a guest.
     if (!tabToken) {
       S = null;
+      // A tab without a token has no session, even if an older build left a
+      // cached user object behind.
+      try { sessionStorage.removeItem("mc_tab_user"); } catch {}
       // Yield after script evaluation so first paint and boot rendering are
       // separate main-thread tasks.
       setTimeout(() => finishBoot(false), 0);
