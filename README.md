@@ -55,18 +55,19 @@ Never commit database passwords, connection strings, encryption keys, JWT secret
 
 ## Deployment
 
-Deploy in this order: Neon database, Render backend, then the Vercel frontend.
+Deploy in this order: Supabase database, Heroku backend, then the Vercel frontend.
 
-1. **Neon:** Create a PostgreSQL project and database. Copy its connection details. Use the pooled hostname if the Neon dashboard offers one, and require SSL.
-2. **Render (backend repository):** Import `medichannel-backend` and create a Blueprint from its root `render.yaml`. The service builds that repository's `Dockerfile`. In the Render service's environment, set:
-   - `DB_URL` to a JDBC URL such as `jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require`
-   - `DB_USERNAME` and `DB_PASSWORD` to the Neon role credentials
-   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` to independent Base64-encoded 32+ byte keys
-   - `APP_FRONTEND_ORIGIN` to the exact frontend origin (for example `https://medichannel.vercel.app`), with no wildcard
+1. **Supabase:** Create a PostgreSQL project. Restore the production dump into it, then let Flyway apply the remaining migrations on first boot. Heroku cannot reach the direct `db.<ref>.supabase.co` host because it is IPv6-only, so use the **Session pooler** (`aws-0-<region>.pooler.supabase.com:5432`) with the username `postgres.<project-ref>` and `sslmode=require`.
+2. **Heroku (backend repository):** Create the app and set config vars:
+   - `DB_URL` to `jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require`
+   - `DB_USERNAME` (`postgres.<project-ref>`) and `DB_PASSWORD` to the Supabase credentials
+   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` to independent Base64-encoded 32+ byte keys. `ENCRYPTION_KEY` must stay stable once patient data exists.
+   - `APP_FRONTEND_ORIGIN` to the exact frontend origin (for example `https://medichannel-f-p3z5.vercel.app`), with no wildcard
    - `APP_ADMIN_EMAIL` and `APP_ADMIN_PASSWORD` for the first administrator bootstrap (password: 8+ characters with a letter, a number and a symbol)
    - Leave `APP_DEMO_SEED` unset or `false` in production
-   Render sets `SPRING_PROFILES_ACTIVE=prod`. Wait for the build and health check (`/actuator/health`) to pass, then copy the `https://...onrender.com` origin.
-3. **Vercel (this repository):** Import this repository at [vercel.com/new](https://vercel.com/new). Vercel detects Next.js, uses the root `vercel.json` (`npm ci` / `npm run build`), and deploys on every push to `main`. In **Project → Settings → Environment Variables**, add `API_URL` (Production and, if you use them, Preview) set to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://medichannel-backend.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Deploy, then set the Render `APP_FRONTEND_ORIGIN` to the exact Vercel production origin (for example `https://medichannel.vercel.app`) and redeploy the backend.
+   - `SPRING_PROFILES_ACTIVE=prod`
+   Deploy with `git push heroku main`; Heroku reads `system.properties` for Java 21 and the `Procfile` for the web command. Wait for `/actuator/health` to report `UP`, then copy the `https://<app>-<hash>.herokuapp.com` origin.
+3. **Vercel (this repository):** Import this repository at [vercel.com/new](https://vercel.com/new). Vercel detects Next.js, uses the root `vercel.json` (`npm ci` / `npm run build`), and deploys on every push to `main`. In **Project → Settings → Environment Variables**, add `API_URL` (Production and, if you use them, Preview) set to the Heroku app origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://evening-plains-20028-0ce7ee55df0f.herokuapp.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Deploy, then set the Heroku `APP_FRONTEND_ORIGIN` to the exact Vercel production origin (for example `https://medichannel-f-p3z5.vercel.app`) and redeploy the backend.
 4. **Netlify (alternative):** Import this repository. Netlify reads the root `netlify.toml`, runs `npm run lint && npm run build`, publishes `.next`, and applies `@netlify/plugin-nextjs` on Node 22. Set the same server-side `API_URL` variable, then set Render's `APP_FRONTEND_ORIGIN` to the Netlify URL.
 5. **Verify:** Confirm the Render service reports healthy, open the Vercel (or Netlify) site, and check that login, the doctor catalogue, and the wake endpoint work. The CSP is generated at build time from `API_URL`, so set `API_URL` before the first deploy and rebuild after changing it.
 

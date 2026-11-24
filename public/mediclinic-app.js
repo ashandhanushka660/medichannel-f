@@ -2794,39 +2794,6 @@
     }
   }
 
-  function samplePublicNotices() {
-    const today = todayISO();
-    return [
-      {
-        id: "sample-notice-1",
-        title: "SAMPLE NOTICE: Live queue and appointment updates",
-        body: "Demo content: Track each doctor’s session in real time on this dashboard. “Now serving” and spots left update as the clinic progresses so you can plan your arrival.",
-        published: true,
-        publishedAt: today + "T08:00:00",
-        createdByName: "Demo (sample)",
-        sample: true,
-      },
-      {
-        id: "sample-notice-2",
-        title: "SAMPLE NOTICE: Booking and check-in reminder",
-        body: "Demo content: Arrive 10–15 minutes before your estimated time for physical visits. Online consultations open from your appointments when the doctor starts the session.",
-        published: true,
-        publishedAt: today + "T08:15:00",
-        createdByName: "Demo (sample)",
-        sample: true,
-      },
-      {
-        id: "sample-notice-3",
-        title: "SAMPLE NOTICE: Emergency and support",
-        body: "Demo content: For medical emergencies call 1990 immediately. For appointment or payment assistance, contact hospital reception during OPD hours.",
-        published: true,
-        publishedAt: today + "T08:30:00",
-        createdByName: "Demo (sample)",
-        sample: true,
-      },
-    ];
-  }
-
   function enhanceIndexDashboard() {
     const indexView = views.find((item) => item.dataset.view === "index");
     if (!indexView) return;
@@ -2982,25 +2949,26 @@
     list.className = "grid gap-6";
     list.replaceChildren();
 
-    let published = (Array.isArray(notices) ? notices : []).filter(
+    const published = (Array.isArray(notices) ? notices : []).filter(
       (notice) => notice && notice.published !== false && !isHiddenPublicNotice(notice)
     );
-    let usingSample = false;
+
     if (!published.length) {
-      published = samplePublicNotices();
-      usingSample = true;
+      if (status) {
+        status.hidden = false;
+        status.className = "text-base sm:text-lg text-slate2";
+        status.textContent = "No notices published yet.";
+      }
+      return;
     }
 
     if (status) {
       status.hidden = false;
-      status.className = "text-base sm:text-lg " + (usingSample ? "text-peach-d" : "text-slate2");
-      status.textContent = usingSample
-        ? "Showing SAMPLE NOTICES (demo content). Real published notices from hospital administration will appear here when available."
-        : "Latest notices published by hospital administration.";
+      status.className = "text-base sm:text-lg text-slate2";
+      status.textContent = "Latest notices published by hospital administration.";
     }
 
     published.forEach((notice) => {
-      const isSampleNotice = usingSample || Boolean(notice && notice.sample);
       const card = el(
         "article",
         "relative overflow-hidden rounded-lg border border-line bg-white shadow-sm transition-shadow hover:shadow-md"
@@ -3008,8 +2976,7 @@
 
       const accent = el(
         "span",
-        "pointer-events-none absolute inset-y-0 left-0 w-1.5 " +
-          (isSampleNotice ? "bg-peach" : "bg-brand-d")
+        "pointer-events-none absolute inset-y-0 left-0 w-1.5 bg-brand-d"
       );
       accent.setAttribute("aria-hidden", "true");
       card.append(accent);
@@ -3024,15 +2991,6 @@
         "flex flex-wrap items-start justify-between gap-x-4 gap-y-2"
       );
       const badges = el("div", "flex flex-wrap items-center gap-2");
-      if (isSampleNotice) {
-        badges.append(
-          el(
-            "span",
-            "inline-flex items-center rounded border border-peach/40 bg-peach/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-peach-d",
-            "Sample notice"
-          )
-        );
-      }
 
       const publishedOn = formatNoticeDate(notice.publishedAt || notice.createdAt);
       const updatedOn = formatNoticeDate(notice.updatedAt);
@@ -3073,11 +3031,8 @@
       tags.append(
         el(
           "span",
-          "inline-flex items-center rounded px-2.5 py-1 text-xs font-semibold " +
-            (isSampleNotice
-              ? "bg-peach/10 text-peach-d"
-              : "bg-brand/10 text-brand-d"),
-          isSampleNotice ? "Demo content" : "Hospital update"
+          "inline-flex items-center rounded px-2.5 py-1 text-xs font-semibold bg-brand/10 text-brand-d",
+          "Hospital update"
         )
       );
       tags.append(
@@ -3102,11 +3057,28 @@
     });
   }
 
+  function showNoticesLoading() {
+    const panel = ensurePublicNoticesPanel();
+    if (!panel) return;
+    const status = panel.querySelector("[data-public-notices-status]");
+    const list = panel.querySelector("[data-public-notices-list]");
+    if (list) list.replaceChildren();
+    if (status) {
+      status.hidden = false;
+      status.className = "text-base sm:text-lg text-slate2";
+      status.textContent = "Notices are loading…";
+    }
+  }
+
   async function loadPublicNotices(options) {
     const settings = options || {};
     if (state.publicNoticesLoaded && !settings.force) {
       renderPublicNotices(state.publicNotices);
       return;
+    }
+
+    if (!state.publicNoticesLoaded) {
+      showNoticesLoading();
     }
 
     try {
@@ -3960,8 +3932,8 @@
 
     if (status) {
       status.hidden = false;
-      status.textContent = "Loading your appointments…";
-      status.classList.remove("text-bad");
+      status.classList.remove("hidden", "text-bad");
+      status.textContent = "Appointments are loading…";
     }
 
     try {
@@ -3987,8 +3959,14 @@
       } else if (banner) {
         banner.hidden = true;
       }
-      if (status) status.hidden = true;
-      if (empty) empty.hidden = list.length > 0;
+      if (status) {
+        status.hidden = true;
+        status.classList.add("hidden");
+      }
+      if (empty) {
+        empty.hidden = list.length > 0;
+        empty.classList.toggle("hidden", list.length > 0);
+      }
       await refreshPatientQueue(list);
     } catch (error) {
       if (error.status === 401) {
@@ -3998,6 +3976,7 @@
 
       if (status) {
         status.hidden = false;
+        status.classList.remove("hidden");
         status.classList.add("text-bad");
         status.textContent = error.message;
       }

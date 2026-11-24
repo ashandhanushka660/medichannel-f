@@ -14,12 +14,13 @@ const inlineScriptHashes = [
   createHash("sha256").update(match[1]).digest("base64")
 );
 
-// Derive the backend CSP origins from API_URL so a renamed Render service does
+// Derive the backend CSP origins from API_URL so a renamed deploy target does
 // not get silently blocked. Falls back to the documented production service.
 const configuredApiUrl =
-  process.env.API_URL?.trim() || "https://medichannel-backend.onrender.com";
-let backendOrigin = "https://medichannel-backend.onrender.com";
-let backendSocketOrigin = "wss://medichannel-backend.onrender.com";
+  process.env.API_URL?.trim() ||
+  "https://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
+let backendOrigin = "https://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
+let backendSocketOrigin = "wss://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
 try {
   const parsed = new URL(configuredApiUrl);
   backendOrigin = `${parsed.protocol}//${parsed.host}`;

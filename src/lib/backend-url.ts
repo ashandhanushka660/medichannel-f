@@ -1,4 +1,5 @@
-const DEFAULT_BACKEND_URL = "https://medichannel-backend.onrender.com";
+const DEFAULT_BACKEND_URL =
+  "https://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
 
 /**
  * Returns the public backend origin configured for this deployment.

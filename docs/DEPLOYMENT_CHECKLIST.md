@@ -33,8 +33,8 @@ Both repositories deploy from their `main` branch.
 - Build: `npm ci` / `npm run build` (pinned in `vercel.json`).
 - Node: 22 (`engines.node >= 20.9.0` in `package.json`).
 - Required env vars (Project → Settings → Environment Variables):
-  - `API_URL=https://medichannel-backend.onrender.com` (server-side only; no `NEXT_PUBLIC_` prefix)
-- Set Render's `APP_FRONTEND_ORIGIN` to the exact Vercel production origin.
+  - `API_URL=https://evening-plains-20028-0ce7ee55df0f.herokuapp.com` (server-side only; no `NEXT_PUBLIC_` prefix)
+- Set Heroku's `APP_FRONTEND_ORIGIN` to the exact Vercel production origin.
 - The CSP `connect-src` is derived from `API_URL` at build time, so set `API_URL` before the first deploy and redeploy after changing it.
 - WebSocket config route: `/api/realtime/config` returns the backend WS URL derived from `API_URL`.
 
@@ -50,12 +50,12 @@ Both repositories deploy from their `main` branch.
 - The CSP `connect-src` is derived from `API_URL` at build time, so set `API_URL` before the first deploy and rebuild after changing it.
 - WebSocket config route: `/api/realtime/config` returns the backend WS URL derived from `API_URL`.
 
-## Neon (database)
+## Supabase (database)
 
-- Flyway runs at startup; the current migration set is V1–V15.
-- Use the direct (non-pooled) endpoint for Flyway.
-- Isolate dev/test on a separate Neon branch (see the backend `render-staging.yaml`).
-- Never point local tests or demo seeding at the production branch.
+- Flyway runs at startup; the current migration set is V1–V25.
+- Use the **Session pooler** (`aws-0-<region>.pooler.supabase.com:5432`, user `postgres.<project-ref>`) for both Flyway and the app. The direct `db.<ref>.supabase.co` host is IPv6-only and Heroku cannot reach it.
+- Restore the production dump (schema at V19) into a clean project, then let Flyway apply V20–V25 on first boot.
+- Never point local tests or demo seeding at the production project.
 
 ## WebSocket configuration
 
