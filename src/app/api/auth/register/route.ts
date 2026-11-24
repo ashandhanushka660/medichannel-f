@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 import { getBackendUrl } from "@/lib/backend-url";
 
@@ -204,7 +203,6 @@ export async function POST(request: NextRequest) {
         },
         { status: 422 }
       );
-      setAuthCookie(result, login.accessToken, login.expiresIn as number);
       return result;
     }
 
@@ -218,7 +216,8 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-    setAuthCookie(result, login.accessToken, login.expiresIn as number);
+    // Registration returns the token for the calling tab's sessionStorage;
+    // issuing a cookie would let another context reuse the same session.
     return result;
   } catch {
     return NextResponse.json(

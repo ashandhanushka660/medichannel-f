@@ -10,23 +10,46 @@ const AUTH_COOKIE = readFileSync(
   new URL("../src/lib/auth-cookie.ts", import.meta.url),
   "utf8"
 );
+const API = readFileSync(
+  new URL("../public/mediclinic-api.js", import.meta.url),
+  "utf8"
+);
+const LOGIN_ROUTE = readFileSync(
+  new URL("../src/app/api/auth/login/route.ts", import.meta.url),
+  "utf8"
+);
+const REGISTER_ROUTE = readFileSync(
+  new URL("../src/app/api/auth/register/route.ts", import.meta.url),
+  "utf8"
+);
 const ME_ROUTE = readFileSync(
   new URL("../src/app/api/auth/me/route.ts", import.meta.url),
   "utf8"
 );
+const BACKEND_ROUTE = readFileSync(
+  new URL("../src/app/api/backend/[...path]/route.ts", import.meta.url),
+  "utf8"
+);
 
-test("anonymous page loads do not call the session endpoint", () => {
-  assert.match(APP, /const hasSessionHint = \(\) =>/);
+test("a copied URL cannot restore a session from another browser context", () => {
+  assert.doesNotMatch(APP, /hasSessionHint/);
   assert.match(
     APP,
-    /if \(!hasSessionHint\(\) && !tabToken\) \{\s*S = null;[\s\S]*?setTimeout\(\(\) => finishBoot\(false\), 0\);\s*return;/
+    /if \(!tabToken\) \{\s*S = null;[\s\S]*?setTimeout\(\(\) => finishBoot\(false\), 0\);\s*return;/
   );
+  assert.match(API, /if \(!tabToken\) return Promise\.resolve\(null\);/);
+
+  // Sign-in no longer writes a cookie that a different context could reuse.
+  assert.doesNotMatch(LOGIN_ROUTE, /setAuthCookie/);
+  assert.doesNotMatch(REGISTER_ROUTE, /setAuthCookie/);
+
+  // The BFF ignores ambient cookies for tab requests.
+  assert.match(ME_ROUTE, /isTabRequest \? null : readAuthToken\(request\)/);
+  assert.match(BACKEND_ROUTE, /isTabRequest \? null : readAuthToken\(request\)/);
   assert.match(
     AUTH_COOKIE,
     /SESSION_HINT_COOKIE_NAME = "medichannel_session_hint"/
   );
-  assert.match(AUTH_COOKIE, /httpOnly: false/);
-  assert.match(ME_ROUTE, /if \(!token\) \{[\s\S]*?clearAuthCookie\(result\)/);
 });
 
 test("date formatters are reused instead of rebuilt per notice", () => {

@@ -9,6 +9,7 @@ type LoginResponse = {
   user: {
     role: "CUSTOMER" | "DOCTOR" | "MANAGER" | "ADMIN";
   };
+  token?: string;
 };
 
 export default function LoginPage() {
@@ -37,6 +38,12 @@ export default function LoginPage() {
       }
 
       const result = data as LoginResponse;
+      // The public shell restores a session only from this tab's token.
+      if (result.token) {
+        try {
+          sessionStorage.setItem("mc_tab_token", result.token);
+        } catch {}
+      }
       const destinations = {
         CUSTOMER: "/",
         DOCTOR: "/doctor/dashboard",

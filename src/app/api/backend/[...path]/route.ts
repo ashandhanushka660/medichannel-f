@@ -22,10 +22,17 @@ async function forwardRequest(
 
   const headers = new Headers();
   const incomingAuth = request.headers.get("authorization");
-  const token = (incomingAuth && incomingAuth.startsWith("Bearer "))
+  const bearer = (incomingAuth && incomingAuth.startsWith("Bearer "))
     ? incomingAuth.substring(7).trim()
-    : readAuthToken(request);
+    : null;
+  const isTabRequest = request.headers.get("x-medichannel-tab") === "1";
 
+  // The public shell is bound to the tab that signed in. An ambient cookie
+  // must never authenticate a tab request: copying a URL could otherwise
+  // inherit a session belonging to a different browser context. Public
+  // endpoints simply receive no Authorization and stay usable by guests;
+  // protected endpoints return their own 401.
+  const token = bearer || (isTabRequest ? null : readAuthToken(request));
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }

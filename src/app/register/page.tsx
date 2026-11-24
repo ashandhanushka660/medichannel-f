@@ -64,6 +64,11 @@ export default function RegisterPage() {
       if (data.profileCreated !== true) {
         throw new Error("Registration completed without a confirmed patient profile.");
       }
+      if (typeof data.token === "string" && data.token) {
+        try {
+          sessionStorage.setItem("mc_tab_token", data.token);
+        } catch {}
+      }
       router.push("/appointments");
       router.refresh();
     } catch (err) {

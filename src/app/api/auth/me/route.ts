@@ -12,12 +12,15 @@ const roles = new Set(["CUSTOMER", "DOCTOR", "MANAGER", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
   const incomingAuth = request.headers.get("authorization");
-  const token = (incomingAuth && incomingAuth.startsWith("Bearer "))
+  const bearer = (incomingAuth && incomingAuth.startsWith("Bearer "))
     ? incomingAuth.substring(7).trim()
-    : readAuthToken(request);
+    : null;
+  const isTabRequest = request.headers.get("x-medichannel-tab") === "1";
+
+  // A pasted URL has no tab token. Even if a cookie from another context is
+  // present, the public shell must never restore that session.
+  const token = bearer || (isTabRequest ? null : readAuthToken(request));
   if (!token) {
-    // A stale session hint should not keep making anonymous page loads call
-    // this endpoint. clearAuthCookie removes the non-secret hint as well.
     const result = NextResponse.json(
       { message: "Authentication required." },
       { status: 401 }

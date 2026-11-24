@@ -26,11 +26,9 @@
     return fetch(url, settings);
   };
 
-  // The server sets this non-secret cookie only alongside the HttpOnly auth
-  // cookie. Anonymous visitors therefore avoid a redundant 401 request.
-  const hasSessionHint = () =>
-    /(?:^|;\s*)medichannel_session_hint=1(?:;|$)/.test(document.cookie);
-
+  // A signed-in session lives only in this tab's sessionStorage. Cookies and
+  // URLs are deliberately never used to restore it: pasting the address into
+  // another tab/window (including a private one) must start anonymous.
   const views = Array.from(document.querySelectorAll("[data-view]"));
   const PRIVATE_VIEWS = [
     "login",
@@ -1896,8 +1894,8 @@
       try {
         const active = JSON.parse(event.newValue);
         if (S && active && active.email && active.email.toLowerCase() !== (S.email || "").toLowerCase()) {
-          // Two accounts can now be used in separate tabs: every tab sends
-          // its own mc_tab_token instead of relying on the shared cookie.
+          // Two accounts can be used in separate tabs: each tab keeps its own
+          // mc_tab_token, so this notice is informational only.
           setAppMessage(
             `Another account (${active.email}) was signed in in a different tab. This tab keeps its own session — carry on here, or sign in again if anything looks out of date.`
           );
@@ -10153,6 +10151,7 @@
         await MC.adminDeleteUser(userId);
         const dialog = $("delete-account-dialog");
         if (dialog) dialog.close();
+        setAppMessage("Account permanently disabled. Its history is retained.");
         await loadStaffAccounts();
         loadOnce(loadAdminStats);
         loadOnce(loadAuditLogs);
@@ -10379,9 +10378,10 @@
       tabToken = sessionStorage.getItem("mc_tab_token");
     } catch {}
 
-    // No cookie hint and no tab token means there is definitely no session to
-    // restore. Rendering immediately keeps anonymous Lighthouse runs clean.
-    if (!hasSessionHint() && !tabToken) {
+    // Only the token stored in this tab can restore a session. A copied URL
+    // carries no credential, and an ambient cookie from another tab/window is
+    // ignored, so a new browsing context always opens as a guest.
+    if (!tabToken) {
       S = null;
       // Yield after script evaluation so first paint and boot rendering are
       // separate main-thread tasks.

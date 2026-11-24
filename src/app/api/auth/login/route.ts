@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 import { getBackendUrl } from "@/lib/backend-url";
 
@@ -50,7 +49,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = NextResponse.json({
+    // The token is returned to the public shell, which keeps it in that tab's
+    // sessionStorage. No cookie is issued, so another tab/window cannot reuse
+    // this session by copying the page URL.
+    return NextResponse.json({
       user: {
         id: data.userId,
         email: data.email,
@@ -58,10 +60,6 @@ export async function POST(request: NextRequest) {
       },
       token: data.accessToken,
     });
-
-    setAuthCookie(result, data.accessToken, data.expiresIn);
-
-    return result;
   } catch {
     return NextResponse.json(
       { message: "Unable to connect to the login service." },

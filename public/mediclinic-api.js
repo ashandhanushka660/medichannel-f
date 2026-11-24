@@ -1,9 +1,9 @@
 /* MediChannel browser API client.
  *
- * Every call goes through the same-origin BFF. A tab-specific bearer token
- * (mc_tab_token in sessionStorage) is attached when present, so two logged-in
- * tabs do not depend on the shared HttpOnly cookie. Otherwise the BFF falls
- * back to that cookie.
+ * Every call goes through the same-origin BFF. The tab-specific bearer token
+ * (mc_tab_token in sessionStorage) is the only credential this client sends;
+ * no cookie fallback exists, so a URL pasted into another browsing context
+ * cannot inherit the session.
  */
 (function () {
   "use strict";
@@ -123,6 +123,9 @@
 
     const headers = new Headers(settings.headers || {});
     const tabToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("mc_tab_token") : null;
+    // Marks this as SPA traffic so the BFF never falls back to an ambient
+    // cookie. The tab token below is the only credential the SPA accepts.
+    headers.set("X-Medichannel-Tab", "1");
     if (tabToken && !headers.has("Authorization")) {
       headers.set("Authorization", "Bearer " + tabToken);
     }
@@ -173,12 +176,13 @@
 
     // Authentication -------------------------------------------------
     me() {
-      // The session route lives outside the BFF prefix.
-      const headers = {};
+      // The session route lives outside the BFF prefix. Never fall back to a
+      // shared cookie: without this tab's token there is no session to keep.
       const tabToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("mc_tab_token") : null;
-      if (tabToken) {
-        headers["Authorization"] = "Bearer " + tabToken;
-      }
+      if (!tabToken) return Promise.resolve(null);
+
+      const headers = { "X-Medichannel-Tab": "1" };
+      headers["Authorization"] = "Bearer " + tabToken;
       const settings = {
         headers,
         credentials: "same-origin",

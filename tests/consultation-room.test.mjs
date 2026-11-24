@@ -90,6 +90,6 @@ test("booked and closed rooms never send unauthorised chat subscriptions", () =>
 });
 
 test("browser cache is busted after asset changes", () => {
-  assert.match(HTML, /mediclinic-app(?:\.min)?\.js\?v=20261124b/);
-  assert.match(HTML, /mediclinic-api\.js\?v=20261124b/);
+  assert.match(HTML, /mediclinic-app(?:\.min)?\.js\?v=20261124c/);
+  assert.match(HTML, /mediclinic-api\.js\?v=20261124c/);
 });

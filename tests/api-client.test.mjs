@@ -326,16 +326,27 @@ test("the access token stays in the Authorization header, never the URL", async 
   assert.doesNotMatch(calls[0].url, /test-tab-token/);
 });
 
-test("me() returns null for an anonymous session", async () => {
-  const { MC } = loadApi({ fetchImpl: () => jsonResponse(401, {}) });
+test("me() returns null without a tab token and does not call the server", async () => {
+  const { MC, calls } = loadApi({
+    fetchImpl: () => {
+      throw new Error("anonymous sessions must not call /api/auth/me");
+    },
+  });
   assert.equal(await MC.me(), null);
+  assert.equal(calls.length, 0);
 });
 
 test("me() parses JSON and reuses the shared error mapping", async () => {
-  const { MC } = loadApi({ fetchImpl: () => jsonResponse(200, { role: "MANAGER" }) });
+  const { MC, calls } = loadApi({
+    tabToken: "tab-token",
+    fetchImpl: () => jsonResponse(200, { role: "MANAGER" }),
+  });
   assert.deepEqual(await MC.me(), { role: "MANAGER" });
+  assert.match(calls[0].settings.headers["Authorization"], /^Bearer tab-token$/);
+  assert.equal(calls[0].settings.headers["X-Medichannel-Tab"], "1");
 
   const failing = loadApi({
+    tabToken: "tab-token",
     fetchImpl: () => new Response("backend exploded", { status: 500 }),
   });
   await assert.rejects(
@@ -372,7 +383,10 @@ test("simultaneous identical reads share one in-flight request", async () => {
 });
 
 test("me() also dedupes concurrent session checks", async () => {
-  const { MC, calls } = loadApi({ fetchImpl: () => jsonResponse(200, { role: "DOCTOR" }) });
+  const { MC, calls } = loadApi({
+    tabToken: "tab-token",
+    fetchImpl: () => jsonResponse(200, { role: "DOCTOR" }),
+  });
   const [first, second] = await Promise.all([MC.me(), MC.me()]);
 
   assert.deepEqual(first, { role: "DOCTOR" });
