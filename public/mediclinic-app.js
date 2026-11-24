@@ -8275,7 +8275,7 @@
 
   function setManagerDashboardCards(values) {
     const targets = [
-      ["[data-manager-sessions-today]", values.sessionsToday],
+      ["[data-manager-sessions-this-week]", values.sessionsThisWeek],
       ["[data-manager-doctors-today]", values.doctorsToday],
       ["[data-manager-completed-today]", values.completedToday],
       ["[data-manager-cancelled-today]", values.cancelledToday],
@@ -8303,7 +8303,7 @@
     const firstLoad = dashboardFetchedAt === 0;
     if (firstLoad) {
       setManagerDashboardCards({
-        sessionsToday: "…",
+        sessionsThisWeek: "…",
         doctorsToday: "…",
         completedToday: "…",
         cancelledToday: "…",
@@ -8312,7 +8312,7 @@
         revenue: "…",
       });
     }
-    setStatus(status, firstLoad ? "Loading today’s figures…" : "");
+    setStatus(status, firstLoad ? "Loading dashboard figures…" : "");
 
     dashboardRequest = (async () => {
       try {
@@ -8330,7 +8330,7 @@
         console.warn("Could not load manager dashboard report:", error);
         dashboardFetchedAt = 0;
         setManagerDashboardCards({
-          sessionsToday: "—",
+          sessionsThisWeek: "—",
           doctorsToday: "—",
           completedToday: "—",
           cancelledToday: "—",
@@ -8340,7 +8340,7 @@
         });
         setStatus(
           status,
-          "Could not load today’s figures: " +
+          "Could not load dashboard figures: " +
             (error.message || "Unknown error") +
             " The dashboard values are unavailable.",
           true

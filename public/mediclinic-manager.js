@@ -170,7 +170,7 @@
   // Missing values stay null so the UI can show "—" instead of a fake zero.
   function dashboardMetrics(report) {
     var metrics = {
-      sessionsToday: null,
+      sessionsThisWeek: null,
       doctorsToday: null,
       completedToday: null,
       cancelledToday: null,
@@ -186,7 +186,10 @@
       ? report.todaySessions
       : null;
 
-    metrics.sessionsToday = sessions ? sessions.length : null;
+    // The brief states more than 120 sessions per week. The backend computes
+    // this from the Monday–Sunday Asia/Colombo roster, independently of the
+    // today-scoped range used for the other cards.
+    metrics.sessionsThisWeek = toNumber(report.sessionsThisWeek);
     metrics.doctorsToday = countDoctors(sessions);
     metrics.completedToday = sumField(sessions, "completed");
     metrics.cancelledToday = toNumber(report.cancelledAppointments);
@@ -212,7 +215,7 @@
   function dashboardCardValues(metrics) {
     var values = metrics || {};
     return {
-      sessionsToday: formatCount(values.sessionsToday),
+      sessionsThisWeek: formatCount(values.sessionsThisWeek),
       doctorsToday: formatCount(values.doctorsToday),
       completedToday: formatCount(values.completedToday),
       cancelledToday: formatCount(values.cancelledToday),

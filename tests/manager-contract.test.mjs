@@ -135,7 +135,7 @@ test("dashboard exposes a live status region and real metric slots", () => {
   assert.equal(attribute(status, "aria-live"), "polite");
 
   for (const slot of [
-    "data-manager-sessions-today",
+    "data-manager-sessions-this-week",
     "data-manager-doctors-today",
     "data-manager-completed-today",
     "data-manager-cancelled-today",

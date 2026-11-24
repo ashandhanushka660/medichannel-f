@@ -59,6 +59,23 @@ test("manager navigation and panels use session management terminology", () => {
   );
 });
 
+test("the dashboard session card reports the weekly roster", () => {
+  assert.match(HTML_SOURCE, /<span>Sessions this week<\/span>/);
+  assert.match(
+    HTML_SOURCE,
+    /<b data-manager-sessions-this-week class="text-ink mt-1">—<\/b>/
+  );
+  assert.equal(HTML_SOURCE.includes("Sessions today"), false);
+  assert.match(
+    HTML_SOURCE,
+    /Sessions this week is the live Monday–Sunday roster count for Asia\/Colombo/
+  );
+  assert.ok(
+    APP_SOURCE.includes('["[data-manager-sessions-this-week]", values.sessionsThisWeek]'),
+    "the weekly metric must be bound to the dashboard card"
+  );
+});
+
 test("session scheduling status messages use schedule terminology", () => {
   for (const expected of [
     "Scheduling session…",
@@ -149,6 +166,9 @@ test("staff password validation rejects weak, mismatched and oversized values", 
 
 test("dashboard metrics come from the reports payload", () => {
   const metrics = UI.dashboardMetrics({
+    sessionsThisWeek: 240,
+    sessionsWeekFrom: "2026-11-23",
+    sessionsWeekTo: "2026-11-29",
     todaySessions: [
       { doctorName: "A. Perera", completed: 3, booked: 5 },
       { doctorName: "A. Perera", completed: 1, booked: 2 },
@@ -161,7 +181,7 @@ test("dashboard metrics come from the reports payload", () => {
     revenueLkr: 12500.5,
   });
 
-  assert.equal(metrics.sessionsToday, 3);
+  assert.equal(metrics.sessionsThisWeek, 240);
   assert.equal(metrics.doctorsToday, 2);
   assert.equal(metrics.completedToday, 6);
   assert.equal(metrics.cancelledToday, 2);
@@ -175,7 +195,7 @@ test("missing report fields stay null instead of becoming zero", () => {
   const metrics = UI.dashboardMetrics({});
 
   for (const key of [
-    "sessionsToday",
+    "sessionsThisWeek",
     "doctorsToday",
     "completedToday",
     "cancelledToday",
@@ -187,7 +207,7 @@ test("missing report fields stay null instead of becoming zero", () => {
     assert.equal(metrics[key], null, key + " must be null when absent");
   }
 
-  assert.equal(UI.formatCount(metrics.sessionsToday), "—");
+  assert.equal(UI.formatCount(metrics.sessionsThisWeek), "—");
   assert.equal(UI.formatLkr(metrics.revenueLkr), "—");
   assert.equal(UI.formatTypeSplit(metrics), "—");
 });
@@ -202,6 +222,7 @@ test("an absent report is never treated as a real zero", () => {
 
 test("real zeros are still displayed as zeros", () => {
   const metrics = UI.dashboardMetrics({
+    sessionsThisWeek: 0,
     todaySessions: [],
     cancelledAppointments: 0,
     totalAppointments: 0,
@@ -210,8 +231,8 @@ test("real zeros are still displayed as zeros", () => {
     revenueLkr: 0,
   });
 
-  assert.equal(metrics.sessionsToday, 0);
-  assert.equal(UI.formatCount(metrics.sessionsToday), "0");
+  assert.equal(metrics.sessionsThisWeek, 0);
+  assert.equal(UI.formatCount(metrics.sessionsThisWeek), "0");
   assert.equal(UI.formatLkr(metrics.revenueLkr), "LKR 0.00");
 });
 
@@ -256,7 +277,7 @@ test("physical / online split reads both report fields", () => {
 
 test("dashboard card values keep zero and unavailable distinct", () => {
   const zeros = UI.dashboardCardValues({
-    sessionsToday: 0,
+    sessionsThisWeek: 0,
     doctorsToday: 0,
     completedToday: 0,
     cancelledToday: 0,
@@ -269,7 +290,7 @@ test("dashboard card values keep zero and unavailable distinct", () => {
   assert.deepEqual(
     JSON.parse(JSON.stringify(zeros)),
     {
-      sessionsToday: "0",
+      sessionsThisWeek: "0",
       doctorsToday: "0",
       completedToday: "0",
       cancelledToday: "0",
@@ -288,6 +309,7 @@ test("dashboard card values keep zero and unavailable distinct", () => {
 test("dashboard card values format real figures for display", () => {
   const values = UI.dashboardCardValues(
     UI.dashboardMetrics({
+      sessionsThisWeek: 280,
       todaySessions: [
         { doctorName: "A. Perera", completed: 4 },
         { doctorName: "A. Perera", completed: 1 },
@@ -301,7 +323,7 @@ test("dashboard card values format real figures for display", () => {
     })
   );
 
-  assert.equal(values.sessionsToday, "3");
+  assert.equal(values.sessionsThisWeek, "280");
   assert.equal(values.doctorsToday, "2");
   assert.equal(values.completedToday, "7");
   assert.equal(values.cancelledToday, "3");
