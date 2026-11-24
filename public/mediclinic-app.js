@@ -1774,7 +1774,7 @@
     if (!user || !HOME[user.role]) {
       S = null;
       try { localStorage.removeItem("mc-active-user"); } catch {}
-      try { sessionStorage.removeItem("mc_tab_user"); sessionStorage.removeItem("mc_tab_token"); } catch {}
+      try { sessionStorage.removeItem("mc_tab_user"); } catch {}
       if (state.doctor.pollTimer) clearInterval(state.doctor.pollTimer);
       state.doctor.pollTimer = null;
       if (state.patientPollTimer) clearInterval(state.patientPollTimer);
@@ -9312,12 +9312,6 @@
         return;
       }
 
-      if (result.token) {
-        try {
-          sessionStorage.setItem("mc_tab_token", result.token);
-        } catch {}
-      }
-
       setSession(result.user);
       form.reset();
       render();
@@ -9394,11 +9388,6 @@
       }
 
       if (result.user && HOME[result.user.role]) {
-        if (result.token) {
-          try {
-            sessionStorage.setItem("mc_tab_token", result.token);
-          } catch {}
-        }
         setSession(result.user);
         form.reset();
         render();
@@ -9419,10 +9408,19 @@
   async function logout(button) {
     if (button) button.disabled = true;
 
+    let tabToken = null;
+    try {
+      tabToken = sessionStorage.getItem("mc_tab_token");
+    } catch {}
+
+    const headers = { "X-Medichannel-Tab": "1" };
+    if (tabToken) headers.Authorization = "Bearer " + tabToken;
+
     try {
       await fetchWithTimeout("/api/auth/logout", {
         method: "POST",
         credentials: "same-origin",
+        headers,
       });
     } catch {
       // Clear locally regardless.
@@ -9430,8 +9428,8 @@
 
     S = null;
     try {
-      sessionStorage.removeItem("mc_tab_token");
       sessionStorage.removeItem("mc_tab_user");
+      sessionStorage.removeItem("mc_tab_token");
     } catch {}
     disconnectRealtime();
     state.appointments = [];
@@ -9713,27 +9711,6 @@
       return;
     }
 
-    const fillLoginBtn = event.target.closest("[data-fill-login]");
-    if (fillLoginBtn) {
-      const [email, password] = (fillLoginBtn.getAttribute("data-fill-login") || "").split("|");
-      const emailInput = $("login-em");
-      const pwInput = $("login-pw");
-      if (emailInput && email) {
-        emailInput.value = email;
-        emailInput.setAttribute("aria-invalid", "false");
-      }
-      if (pwInput && password) {
-        pwInput.value = password;
-        pwInput.setAttribute("aria-invalid", "false");
-      }
-      const err = $("login-err");
-      if (err) err.hidden = true;
-      const emErr = $("login-e_em");
-      if (emErr) emErr.textContent = "";
-      const pwErr = $("login-e_pw");
-      if (pwErr) pwErr.textContent = "";
-      return;
-    }
 
     const showButton = event.target.closest("[data-show]");
     if (showButton) {

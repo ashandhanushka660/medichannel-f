@@ -103,15 +103,21 @@ export default function Workspace({
 
   async function logout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const tabToken = sessionStorage.getItem("mc_tab_token");
+    const headers: Record<string, string> = { "X-Medichannel-Tab": "1" };
+    if (tabToken) headers.Authorization = `Bearer ${tabToken}`;
+
     const response = await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "same-origin",
+      headers,
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       setSessionError(data.message || "Unable to log out.");
       return;
     }
+    sessionStorage.removeItem("mc_tab_token");
     router.replace("/login");
     router.refresh();
   }

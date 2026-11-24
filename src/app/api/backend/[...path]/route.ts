@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readAuthToken } from "@/lib/auth-cookie";
+import { clearAuthCookie, readAuthToken } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 import { getBackendUrl } from "@/lib/backend-url";
 
@@ -63,7 +63,7 @@ async function forwardRequest(
     // turned a successful DELETE into a 502 "backend unreachable" error.
     const bodyless = status === 204 || status === 205 || status === 304;
 
-    return new NextResponse(bodyless ? null : responseBody, {
+    const response = new NextResponse(bodyless ? null : responseBody, {
       status,
       headers: {
         "Content-Type":
@@ -72,6 +72,12 @@ async function forwardRequest(
         "Cache-Control": "no-store",
       },
     });
+
+    if (status === 401) {
+      clearAuthCookie(response);
+    }
+
+    return response;
   } catch (error) {
     const targetPath = `/api/v1/${path.join("/")}`;
     console.error("Backend proxy request failed:", {

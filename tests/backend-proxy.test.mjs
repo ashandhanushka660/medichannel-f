@@ -21,3 +21,14 @@ test("the proxy never builds a bodyful response for 204/205/304", () => {
 test("the proxy forwards DELETE requests to the backend", () => {
   assert.match(ROUTE, /export const DELETE = forwardRequest;/);
 });
+
+test("the proxy prefers the tab bearer token and ignores cookies for SPA traffic", () => {
+  assert.match(ROUTE, /x-medichannel-tab/);
+  assert.match(ROUTE, /bearer \|\| \(isTabRequest \? null : readAuthToken\(request\)\)/);
+  assert.doesNotMatch(ROUTE, /const token = readAuthToken\(request\);\s*\n\s*\n\s*\/\/ The public shell/);
+});
+
+test("the proxy clears legacy auth cookies when the backend responds with 401", () => {
+  assert.match(ROUTE, /status === 401/);
+  assert.match(ROUTE, /clearAuthCookie\(response\)/);
+});
