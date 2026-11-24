@@ -114,7 +114,7 @@ ${functionSource("directoryAttendance")}
 ${functionSource("filteredDirectoryItems")}
 ${functionSource("renderDoctorDirectory")}
 return { renderDoctorDirectory, filteredDirectoryItems };`
-  )(document, el, badge, null, null, null, session, state, 8, 10);
+  )(document, el, badge, null, null, null, session, state, 8, 5);
 
   return { list, render: render.renderDoctorDirectory, state, status, text };
 }
@@ -184,7 +184,7 @@ test("guest cards show availability, room, fee, hours, attendance and live queue
     "LKR 2,500",
     "07:00–16:00",
     "8 hours",
-    "10 min per patient",
+    "5 min per patient",
     "Physical · in consultation",
     "Now serving",
     "#3",

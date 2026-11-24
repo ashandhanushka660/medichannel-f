@@ -53,10 +53,10 @@ test("every cancellation path records a mandatory reason", () => {
   assert.doesNotMatch(APP, /window\.confirm\("Decline this appointment/);
 });
 
-test("create-session form publishes the full clinic day and 10-minute slots", () => {
+test("create-session form publishes the full clinic day and 5-30 minute slots", () => {
   assert.match(APP, /const CLINIC_START = "07:00"/);
   assert.match(APP, /const CLINIC_END = "16:00"/);
   assert.match(APP, /const CLINIC_HOURS = 8/);
-  assert.match(APP, /const SLOT_MINUTES = 10/);
+  assert.match(APP, /const SLOT_MINUTES = 5/);
   assert.match(APP, /" · " \+ CLINIC_WINDOW_LABEL/);
 });

@@ -62,7 +62,7 @@ function text(value) {
     .join(" ");
 }
 
-const CLINIC_HOURS_LABEL = "07:00–16:00 · 10 min per patient";
+const CLINIC_HOURS_LABEL = "07:00–16:00 · 5 min per patient";
 
 function makeSessionHarness(session, queue) {
   const document = {
@@ -124,7 +124,7 @@ const session = {
   endTime: "12:00:00",
   consultationType: "PHYSICAL",
   status: "OPEN",
-  minutesPerPatient: 10,
+  minutesPerPatient: 5,
   maxAppointments: 6,
   remainingAppointments: 2,
   feeLkr: 2500,
@@ -171,7 +171,7 @@ test("session cards show congruent clinic hours and the live queue", () => {
   for (const expected of [
     "Dr. Rajini Kanth",
     "07:00–16:00",
-    "10 min per patient",
+    "5 min per patient",
     "Now serving #3",
     "Next #4",
     "Spots left (live)",
@@ -190,7 +190,7 @@ test("the booking confirmation keeps showing the allocated queue number", () => 
   );
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261123v"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261124b"/
   );
 });
 

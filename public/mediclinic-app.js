@@ -43,12 +43,16 @@
     "consult",
   ];
   const TZ = "Asia/Colombo";
+  const CLINIC_UTC_OFFSET = "+05:30";
   // The published clinic day shared with the guest doctor directory and the
   // backend booking rules. Patient sessions are only shown when they fit.
   const CLINIC_START = "07:00";
   const CLINIC_END = "16:00";
   const CLINIC_HOURS = 8;
-  const SLOT_MINUTES = 10;
+  const SLOT_MINUTES = 5;
+  const MAX_PATIENTS_PER_SESSION = 60;
+  const PHYSICAL_BOOKING_CLOSE_MINUTES = 60;
+  const ONLINE_BOOKING_CLOSE_MINUTES = 30;
   const CLINIC_WINDOW_LABEL = CLINIC_START + "–" + CLINIC_END;
   const CLINIC_HOURS_LABEL =
     CLINIC_WINDOW_LABEL + " · " + SLOT_MINUTES + " min per patient";
@@ -728,12 +732,12 @@
   }
 
   /**
-   * The patient's allocated 10-minute slot, derived from the server's live
+   * The patient's allocated 5–30 minute slot, derived from the server's live
    * estimated start time so delays and cancellations are reflected here too.
    */
   function appointmentSlot(value) {
     const start = value && value.estimatedConsultationTime;
-    const minutes = Number(value && value.minutesPerPatient) || 10;
+    const minutes = Number(value && value.minutesPerPatient) || SLOT_MINUTES;
     if (!start) return { range: "—", finish: "—", minutes };
 
     const match = String(start).match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
@@ -852,8 +856,17 @@
 
   function sessionStart(session) {
     if (!session || !session.sessionDate) return null;
+    // Session times are Asia/Colombo wall-clock values, not browser-local time.
+    // API values already carry seconds ("09:00:00"), so normalise to HH:mm
+    // before adding the offset; otherwise the date string is invalid and the
+    // deadline check silently becomes a no-op.
+    const clockTime = String(session.startTime || "00:00").slice(0, 5);
     const date = new Date(
-      session.sessionDate + "T" + (session.startTime || "00:00") + ":00"
+      session.sessionDate +
+        "T" +
+        clockTime +
+        ":00" +
+        CLINIC_UTC_OFFSET
     );
     return Number.isNaN(date.getTime()) ? null : date;
   }
@@ -861,7 +874,10 @@
   function bookingDeadline(session) {
     const start = sessionStart(session);
     if (!start) return null;
-    const minutes = session.consultationType === "PHYSICAL" ? 60 : 30;
+    const minutes =
+      session.consultationType === "PHYSICAL"
+        ? PHYSICAL_BOOKING_CLOSE_MINUTES
+        : ONLINE_BOOKING_CLOSE_MINUTES;
     return new Date(start.getTime() - minutes * 60000);
   }
 
@@ -2017,7 +2033,7 @@
   /**
    * Only sessions for doctors advertised as available on the guest dashboard
    * may be offered to a patient. The backend applies the same rule together
-   * with the 07:00–16:00 / 10-minute-slot congruence check.
+   * with the 07:00–16:00 / 5–30-minute-slot congruence check.
    */
   function bookableSessions(sessions) {
     return (Array.isArray(sessions) ? sessions : []).filter(
@@ -9062,8 +9078,8 @@
     let startTime = ($("sess-start") || {}).value || "";
     let endTime = ($("sess-end") || {}).value || "";
     const feeLkr = Number(($("sess-fee") || {}).value || 0);
-    const maxAppointments = Number(($("sess-max") || {}).value || 16);
-    const minutesPerPatient = Number(($("sess-mins") || {}).value || 10);
+    const maxAppointments = Number(($("sess-max") || {}).value || MAX_PATIENTS_PER_SESSION);
+    const minutesPerPatient = Number(($("sess-mins") || {}).value || SLOT_MINUTES);
 
     if (!doctorId) {
       setStatus(status, "Please select a doctor.", true);
@@ -9090,8 +9106,8 @@
       return;
     }
 
-    if (!Number.isFinite(maxAppointments) || maxAppointments < 1 || maxAppointments > 60) {
-      setStatus(status, "Maximum patients must be between 1 and 60 (BR-01).", true);
+    if (!Number.isFinite(maxAppointments) || maxAppointments < 1 || maxAppointments > MAX_PATIENTS_PER_SESSION) {
+      setStatus(status, "Maximum patients must be between 1 and " + MAX_PATIENTS_PER_SESSION + " (BR-01).", true);
       return;
     }
     if (!Number.isFinite(minutesPerPatient) || minutesPerPatient < 5 || minutesPerPatient > 30) {

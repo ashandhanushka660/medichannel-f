@@ -90,6 +90,6 @@ test("the rendered account view updates the welcome CTA", () => {
   assert.match(APP_SOURCE, /renderWelcomeCta\(\);[\s\S]{0,240}data-roles/);
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261123v"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261124b"/
   );
 });

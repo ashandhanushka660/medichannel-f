@@ -32,7 +32,7 @@ test("the manager create-session form covers the published clinic day", () => {
   );
   assert.match(
     HTML_SOURCE,
-    /<input id="sess-max" type="number" min="1" max="48" value="48"[^>]*>/
+    /<input id="sess-max" type="number" min="1" max="60" value="60"[^>]*>/
   );
 });
 
