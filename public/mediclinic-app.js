@@ -7673,8 +7673,8 @@
     const note = form.querySelector("[data-role-note]");
     if (note) {
       note.textContent = isDoctor
-        ? "The password is temporary. The doctor must change it at first login."
-        : "The account is activated immediately. Share the temporary password securely; the user can change it after signing in.";
+        ? "The doctor account is active immediately and can sign in with this password."
+        : "The account is active immediately. Share the password securely; the user can change it after signing in.";
     }
   }
 

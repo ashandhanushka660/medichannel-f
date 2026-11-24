@@ -252,6 +252,19 @@ test("dashboard cards use the tested formatter and honest labels", () => {
   assert.match(HTML, /revenue counts completed payments only/);
 });
 
+test("new doctor accounts can sign in without a forced password change", () => {
+  assert.match(
+    APP,
+    /The doctor account is active immediately and can sign in with this password\./
+  );
+  assert.match(
+    HTML,
+    /The doctor account is active immediately and can sign in with this password\./
+  );
+  assert.doesNotMatch(APP, /must change it at first login/);
+  assert.doesNotMatch(HTML, /must change it at first login/);
+});
+
 test("feedback list has its own heading for assistive technology", () => {
   assert.match(HTML, /<h3 class="font-semibold text-ink">Patient feedback<\/h3>/);
 });
