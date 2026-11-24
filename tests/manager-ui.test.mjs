@@ -11,6 +11,10 @@ const HTML_SOURCE = readFileSync(
   new URL("../public/mediclinic-system.html", import.meta.url),
   "utf8"
 );
+const APP_SOURCE = readFileSync(
+  new URL("../public/mediclinic-app.js", import.meta.url),
+  "utf8"
+);
 
 function loadManagerUI() {
   const sandbox = { window: {} };
@@ -21,7 +25,7 @@ function loadManagerUI() {
 
 const UI = loadManagerUI();
 
-test("the manager create-session form covers the two published windows", () => {
+test("the manager session form covers the two published windows", () => {
   assert.match(
     HTML_SOURCE,
     /<select id="sess-start"[^>]*><option value="07:00">Morning · 07:00 – 09:30<\/option><option value="12:00">Afternoon · 12:00 – 14:30<\/option><\/select>/
@@ -34,6 +38,43 @@ test("the manager create-session form covers the two published windows", () => {
     HTML_SOURCE,
     /<input id="sess-max" type="number" min="1" max="30" value="30"[^>]*>/
   );
+});
+
+test("manager navigation and panels use session management terminology", () => {
+  assert.match(
+    HTML_SOURCE,
+    /<a href="#manager-s" data-panel-link class="sa">Session management<\/a>/
+  );
+  assert.match(
+    HTML_SOURCE,
+    /<h1 class="text-2xl font-bold text-ink">Session management<\/h1>/
+  );
+  assert.match(HTML_SOURCE, /Schedule a session\n<\/a>/);
+  assert.match(HTML_SOURCE, /➕ Schedule a session\n<\/button>/);
+  assert.match(HTML_SOURCE, /➕ Schedule or manage sessions →/);
+  assert.equal(HTML_SOURCE.includes("Create session"), false);
+  assert.ok(
+    (HTML_SOURCE.match(/>Session management<\/a>/g) || []).length >= 8,
+    "all manager navigation links should say Session management"
+  );
+});
+
+test("session scheduling status messages use schedule terminology", () => {
+  for (const expected of [
+    "Scheduling session…",
+    "Session successfully scheduled for ",
+    "Failed to schedule session.",
+  ]) {
+    assert.ok(APP_SOURCE.includes(expected), `missing ${expected}`);
+  }
+
+  for (const stale of [
+    "Creating session…",
+    "Session successfully created for ",
+    "Failed to create session.",
+  ]) {
+    assert.equal(APP_SOURCE.includes(stale), false, `stale text: ${stale}`);
+  }
 });
 
 test("notice payload matches the backend contract", () => {

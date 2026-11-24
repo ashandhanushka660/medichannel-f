@@ -9539,14 +9539,14 @@
     };
 
     if (button) button.disabled = true;
-    setStatus(status, "Creating session…");
+    setStatus(status, "Scheduling session…");
 
     try {
       const result = await MC.createSession(payload);
       const docName = $("sess-doc") && $("sess-doc").selectedOptions[0] ? $("sess-doc").selectedOptions[0].textContent : "the doctor";
       setStatus(
         status,
-        "Session successfully created for " + docName + "! The session is open and ready for patient booking."
+        "Session successfully scheduled for " + docName + "! The session is open and ready for patient booking."
       );
       showNotificationToast({
         title: "Session scheduled",
@@ -9559,7 +9559,7 @@
       void loadSessions();
       loadOnce(loadAuditLogs);
     } catch (err) {
-      setStatus(status, err.message || "Failed to create session.", true);
+      setStatus(status, err.message || "Failed to schedule session.", true);
     } finally {
       if (button) button.disabled = false;
     }
