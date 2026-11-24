@@ -16,9 +16,29 @@ const inlineScriptHashes = [
 
 // Derive the backend CSP origins from API_URL so a renamed deploy target does
 // not get silently blocked. Falls back to the documented production service.
+// Retired hosts are ignored: a stale API_URL pointing at one of them would
+// break every proxied request and the browser WebSocket connection.
+const RETIRED_BACKEND_HOSTS = [
+  "medichannel-backend.onrender.com",
+  "trycloudflare.com",
+];
+
+const isRetiredBackend = (value: string) => {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return RETIRED_BACKEND_HOSTS.some(
+      (retired) => host === retired || host.endsWith("." + retired)
+    );
+  } catch {
+    return false;
+  }
+};
+
+const configuredApiUrlRaw = process.env.API_URL?.trim() || "";
 const configuredApiUrl =
-  process.env.API_URL?.trim() ||
-  "https://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
+  configuredApiUrlRaw && !isRetiredBackend(configuredApiUrlRaw)
+    ? configuredApiUrlRaw
+    : "https://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
 let backendOrigin = "https://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
 let backendSocketOrigin = "wss://evening-plains-20028-0ce7ee55df0f.herokuapp.com";
 try {
@@ -133,7 +153,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
+            value: "public, max-age=0, must-revalidate",
           },
         ],
       },
@@ -142,7 +162,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
+            value: "public, max-age=0, must-revalidate",
           },
         ],
       },
@@ -151,7 +171,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
+            value: "public, max-age=0, must-revalidate",
           },
         ],
       },
