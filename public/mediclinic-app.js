@@ -939,6 +939,198 @@
     if (changed && message) animateStateChange(node);
   }
 
+  // ---------------------------------------------------------------
+  // Searchable dropdowns
+  //
+  // Any select with more than ten options opens a search panel anchored
+  // to the select. The original select stays in the DOM so existing form
+  // validation, reset and change handlers keep working unchanged.
+  // ---------------------------------------------------------------
+
+  const SEARCHABLE_SELECT_MIN_OPTIONS = 10;
+  const SEARCHABLE_SELECT_MAX_SHOWN = 200;
+  let searchSelectPanel = null;
+  let searchableSelect = null;
+  let searchableIndex = -1;
+  let suppressScrollCloseUntil = 0;
+
+  function isSearchableSelect(select) {
+    return Boolean(
+      select &&
+        select.tagName === "SELECT" &&
+        !select.disabled &&
+        !select.multiple &&
+        !select.hasAttribute("data-no-search") &&
+        select.options.length > SEARCHABLE_SELECT_MIN_OPTIONS
+    );
+  }
+
+  function buildSearchSelectPanel() {
+    if (searchSelectPanel) return searchSelectPanel;
+
+    const panel = el("div", "mc-search-select");
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Search dropdown options");
+
+    const head = el("div", "mc-search-select-head");
+    const input = el("input");
+    input.type = "search";
+    input.autocomplete = "off";
+    input.placeholder = "Search options…";
+    input.setAttribute("aria-label", "Search options");
+    const close = el("button", "", "×");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close options");
+    head.append(input, close);
+
+    const list = el("div", "mc-search-select-options");
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", "Dropdown options");
+    list.addEventListener("click", (event) => {
+      const option = event.target.closest("button[data-search-value]");
+      if (option) chooseSearchableOption(option.dataset.searchValue);
+    });
+    input.addEventListener("input", renderSearchableOptions);
+    close.addEventListener("click", () => {
+      const previous = searchableSelect;
+      closeSearchSelect();
+      if (previous) previous.focus();
+    });
+    panel.append(head, list);
+    document.body.append(panel);
+
+    searchSelectPanel = { panel, input, close, list };
+    return searchSelectPanel;
+  }
+
+  function positionSearchSelectPanel(select, panel) {
+    const rect = select.getBoundingClientRect();
+    const width = Math.max(rect.width, 224);
+    const left = Math.max(
+      8,
+      Math.min(rect.left, window.innerWidth - width - 8)
+    );
+    const below = window.innerHeight - rect.bottom;
+    const height = Math.max(180, Math.min(360, below - 12));
+    const top =
+      below > height + 12 ? rect.bottom + 4 : Math.max(8, rect.top - height - 4);
+
+    panel.style.width = Math.round(width) + "px";
+    panel.style.left = Math.round(left) + "px";
+    panel.style.top = Math.round(top) + "px";
+    panel.style.maxHeight = Math.round(height) + "px";
+  }
+
+  function closeSearchSelect() {
+    if (!searchableSelect) return;
+    searchableSelect.removeAttribute("aria-expanded");
+    searchableSelect = null;
+    searchableIndex = -1;
+    if (searchSelectPanel) searchSelectPanel.panel.hidden = true;
+  }
+
+  function setSearchableActive(index) {
+    if (!searchSelectPanel) return;
+    const options = Array.from(
+      searchSelectPanel.list.querySelectorAll("button[data-search-value]")
+    );
+    if (!options.length) return;
+    searchableIndex = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((node, i) => {
+      node.dataset.active = i === searchableIndex ? "true" : "false";
+    });
+    options[searchableIndex].scrollIntoView({ block: "nearest" });
+  }
+
+  function renderSearchableOptions() {
+    if (!searchableSelect || !searchSelectPanel) return;
+    const { input, list } = searchSelectPanel;
+    const term = input.value.trim().toLowerCase();
+    const current = searchableSelect.value;
+    const all = Array.from(searchableSelect.options);
+    const matches = all.filter((option) => {
+      if (!term) return true;
+      return (
+        option.textContent.toLowerCase().includes(term) ||
+        option.value.toLowerCase().includes(term)
+      );
+    });
+    const shown = matches.slice(0, SEARCHABLE_SELECT_MAX_SHOWN);
+
+    list.replaceChildren();
+    if (!shown.length) {
+      list.append(
+        el("p", "mc-search-select-empty", "No options match your search.")
+      );
+      searchableIndex = -1;
+      return;
+    }
+
+    shown.forEach((option) => {
+      const node = el(
+        "button",
+        "mc-search-select-option",
+        option.textContent || option.value || "(no label)"
+      );
+      node.type = "button";
+      node.setAttribute("role", "option");
+      node.setAttribute("aria-selected", option.value === current ? "true" : "false");
+      node.dataset.searchValue = option.value;
+      node.dataset.active = "false";
+      list.append(node);
+    });
+
+    if (matches.length > shown.length) {
+      list.append(
+        el(
+          "p",
+          "mc-search-select-empty",
+          "Showing the first " +
+            shown.length +
+            " of " +
+            matches.length +
+            " options. Keep typing to narrow the list."
+        )
+      );
+    }
+    setSearchableActive(0);
+  }
+
+  function openSearchSelect(select) {
+    if (!isSearchableSelect(select)) return;
+    if (searchableSelect === select) return;
+    closeSearchSelect();
+
+    const ui = buildSearchSelectPanel();
+    // A dialog is in the browser's top layer: the panel must live inside it,
+    // otherwise the dialog backdrop would cover the search options.
+    const host = select.closest("dialog") || document.body;
+    if (ui.panel.parentElement !== host) host.append(ui.panel);
+    searchableSelect = select;
+    select.setAttribute("aria-expanded", "true");
+    ui.input.value = "";
+    positionSearchSelectPanel(select, ui.panel);
+    ui.panel.hidden = false;
+    renderSearchableOptions();
+    // Focusing the search field can scroll it into view; do not treat that
+    // programmatic scroll as a user dismissal.
+    suppressScrollCloseUntil = Date.now() + 300;
+    ui.input.focus();
+  }
+
+  function chooseSearchableOption(value) {
+    if (!searchableSelect) return;
+    const select = searchableSelect;
+    if (select.value !== value) {
+      select.value = value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    closeSearchSelect();
+    select.focus();
+  }
+
   function preserveScroll(mutation) {
     const y = window.scrollY;
     mutation();
@@ -8950,72 +9142,6 @@
     }
   }
 
-  // Walk-in session list cache so the search box can filter without refetching.
-  const walkInSessionOptions = new WeakMap();
-
-  function walkInSessionLabel(session) {
-    return [
-      "Dr. " + (session.doctorName || "Doctor"),
-      formatDate(session.sessionDate),
-      formatTime(session.startTime),
-      session.roomNumber ? "Room " + session.roomNumber : "",
-      session.consultationType === "ONLINE" ? "online" : "physical",
-      session.remainingAppointments + " left",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  }
-
-  function renderWalkInSessionOptions(select) {
-    if (!select) return;
-    const search = document.querySelector("[data-walkin-session-search]");
-    const hint = document.querySelector("[data-walkin-session-hint]");
-    const term = String(search ? search.value : "").trim().toLowerCase();
-    const options = walkInSessionOptions.get(select) || [];
-    const selected = select.value;
-    const matches = term
-      ? options.filter((option) => option.label.toLowerCase().includes(term))
-      : options;
-
-    const placeholder = el("option", "", "");
-    placeholder.value = "";
-    placeholder.textContent = !options.length
-      ? "No open sessions…"
-      : term && !matches.length
-        ? "No sessions match your search"
-        : "Choose an open session…";
-    select.replaceChildren(placeholder);
-
-    matches.forEach((option) => {
-      const node = el("option", "", option.label);
-      node.value = option.value;
-      select.append(node);
-    });
-
-    if (selected && matches.some((option) => option.value === selected)) {
-      select.value = selected;
-    }
-
-    if (hint) {
-      if (term) {
-        hint.hidden = false;
-        hint.textContent =
-          matches.length +
-          " of " +
-          options.length +
-          " open sessions match your search.";
-      } else if (options.length) {
-        hint.hidden = false;
-        hint.textContent =
-          options.length +
-          " open sessions available. Type above to narrow the list.";
-      } else {
-        hint.hidden = true;
-        hint.textContent = "";
-      }
-    }
-  }
-
   async function loadWalkInSessions(select, status) {
     if (!select) return;
     const loading = el("option", "", "Loading open sessions…");
@@ -9030,14 +9156,24 @@
           Number(session.remainingAppointments) > 0
       );
 
-      walkInSessionOptions.set(
-        select,
-        open.map((session) => ({
-          value: session.sessionId || "",
-          label: walkInSessionLabel(session),
-        }))
-      );
-      renderWalkInSessionOptions(select);
+      const placeholder = el("option", "", "Choose an open session…");
+      placeholder.value = "";
+      select.replaceChildren(placeholder);
+
+      open.forEach((session) => {
+        const label = [
+          "Dr. " + (session.doctorName || "Doctor"),
+          formatDate(session.sessionDate),
+          formatTime(session.startTime),
+          session.consultationType === "ONLINE" ? "online" : "physical",
+          session.remainingAppointments + " left",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        const option = el("option", "", label);
+        option.value = session.sessionId || "";
+        select.append(option);
+      });
 
       if (!open.length) {
         setStatus(status, "There are no open sessions with available slots.", true);
@@ -9059,8 +9195,6 @@
 
     form.reset();
     form.dataset.busy = "false";
-    const search = form.querySelector("[data-walkin-session-search]");
-    if (search) search.value = "";
     const status = form.querySelector("[data-walkin-status]");
     setStatus(status, "");
     const submit = form.querySelector("[data-walkin-submit]");
@@ -10506,17 +10640,6 @@
     });
   }
 
-  const walkinSessionSearch = document.querySelector(
-    "[data-walkin-session-search]"
-  );
-  if (walkinSessionSearch) {
-    walkinSessionSearch.addEventListener("input", () => {
-      renderWalkInSessionOptions(
-        document.querySelector("[data-walkin-session]")
-      );
-    });
-  }
-
   const adminCreateRoomForm = document.querySelector("[data-admin-create-room-form]");
   if (adminCreateRoomForm) {
     adminCreateRoomForm.addEventListener("submit", (event) => {
@@ -10556,6 +10679,124 @@
       }
     });
   }
+
+  // Searchable dropdown interactions. These are delegated so dynamically
+  // populated selects are enhanced without any per-control wiring.
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (
+        searchSelectPanel &&
+        !searchSelectPanel.panel.contains(target) &&
+        target.closest("select") !== searchableSelect
+      ) {
+        closeSearchSelect();
+      }
+
+      const select = target.closest("select");
+      if (!select || !isSearchableSelect(select) || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openSearchSelect(select);
+    },
+    true
+  );
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        searchSelectPanel &&
+        searchableSelect &&
+        searchSelectPanel.panel.contains(event.target)
+      ) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setSearchableActive(searchableIndex + 1);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setSearchableActive(searchableIndex - 1);
+          return;
+        }
+        if (event.key === "Enter" && searchableIndex >= 0) {
+          event.preventDefault();
+          const option = searchSelectPanel.list.querySelector(
+            "button[data-search-value][data-active='true']"
+          );
+          if (option) chooseSearchableOption(option.dataset.searchValue);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          const previous = searchableSelect;
+          closeSearchSelect();
+          if (previous) previous.focus();
+          return;
+        }
+      }
+
+      if (event.key === "Escape") {
+        closeSearchSelect();
+        return;
+      }
+
+      const target = event.target instanceof Element ? event.target : null;
+      const select = target ? target.closest("select") : null;
+      if (!select || !isSearchableSelect(select)) return;
+      if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        openSearchSelect(select);
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    "close",
+    (event) => {
+      if (
+        searchableSelect &&
+        event.target instanceof Element &&
+        event.target.contains(searchableSelect)
+      ) {
+        closeSearchSelect();
+      }
+    },
+    true
+  );
+
+  document.addEventListener("focusout", (event) => {
+    if (!searchableSelect || !searchSelectPanel) return;
+    setTimeout(() => {
+      if (!searchableSelect) return;
+      if (
+        searchSelectPanel.panel.contains(document.activeElement) ||
+        document.activeElement === searchableSelect
+      ) {
+        return;
+      }
+      closeSearchSelect();
+    }, 0);
+  });
+
+  window.addEventListener("resize", () => closeSearchSelect());
+  window.addEventListener(
+    "scroll",
+    (event) => {
+      if (
+        searchSelectPanel &&
+        Date.now() >= suppressScrollCloseUntil &&
+        !searchSelectPanel.panel.contains(event.target)
+      ) {
+        closeSearchSelect();
+      }
+    },
+    true
+  );
 
   window.addEventListener("hashchange", () => go());
 
