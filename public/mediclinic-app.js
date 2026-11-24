@@ -8950,6 +8950,72 @@
     }
   }
 
+  // Walk-in session list cache so the search box can filter without refetching.
+  const walkInSessionOptions = new WeakMap();
+
+  function walkInSessionLabel(session) {
+    return [
+      "Dr. " + (session.doctorName || "Doctor"),
+      formatDate(session.sessionDate),
+      formatTime(session.startTime),
+      session.roomNumber ? "Room " + session.roomNumber : "",
+      session.consultationType === "ONLINE" ? "online" : "physical",
+      session.remainingAppointments + " left",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function renderWalkInSessionOptions(select) {
+    if (!select) return;
+    const search = document.querySelector("[data-walkin-session-search]");
+    const hint = document.querySelector("[data-walkin-session-hint]");
+    const term = String(search ? search.value : "").trim().toLowerCase();
+    const options = walkInSessionOptions.get(select) || [];
+    const selected = select.value;
+    const matches = term
+      ? options.filter((option) => option.label.toLowerCase().includes(term))
+      : options;
+
+    const placeholder = el("option", "", "");
+    placeholder.value = "";
+    placeholder.textContent = !options.length
+      ? "No open sessions…"
+      : term && !matches.length
+        ? "No sessions match your search"
+        : "Choose an open session…";
+    select.replaceChildren(placeholder);
+
+    matches.forEach((option) => {
+      const node = el("option", "", option.label);
+      node.value = option.value;
+      select.append(node);
+    });
+
+    if (selected && matches.some((option) => option.value === selected)) {
+      select.value = selected;
+    }
+
+    if (hint) {
+      if (term) {
+        hint.hidden = false;
+        hint.textContent =
+          matches.length +
+          " of " +
+          options.length +
+          " open sessions match your search.";
+      } else if (options.length) {
+        hint.hidden = false;
+        hint.textContent =
+          options.length +
+          " open sessions available. Type above to narrow the list.";
+      } else {
+        hint.hidden = true;
+        hint.textContent = "";
+      }
+    }
+  }
+
   async function loadWalkInSessions(select, status) {
     if (!select) return;
     const loading = el("option", "", "Loading open sessions…");
@@ -8964,24 +9030,14 @@
           Number(session.remainingAppointments) > 0
       );
 
-      const placeholder = el("option", "", "Choose an open session…");
-      placeholder.value = "";
-      select.replaceChildren(placeholder);
-
-      open.forEach((session) => {
-        const label = [
-          "Dr. " + (session.doctorName || "Doctor"),
-          formatDate(session.sessionDate),
-          formatTime(session.startTime),
-          session.consultationType === "ONLINE" ? "online" : "physical",
-          session.remainingAppointments + " left",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        const option = el("option", "", label);
-        option.value = session.sessionId || "";
-        select.append(option);
-      });
+      walkInSessionOptions.set(
+        select,
+        open.map((session) => ({
+          value: session.sessionId || "",
+          label: walkInSessionLabel(session),
+        }))
+      );
+      renderWalkInSessionOptions(select);
 
       if (!open.length) {
         setStatus(status, "There are no open sessions with available slots.", true);
@@ -9003,6 +9059,8 @@
 
     form.reset();
     form.dataset.busy = "false";
+    const search = form.querySelector("[data-walkin-session-search]");
+    if (search) search.value = "";
     const status = form.querySelector("[data-walkin-status]");
     setStatus(status, "");
     const submit = form.querySelector("[data-walkin-submit]");
@@ -10445,6 +10503,17 @@
     walkinCancel.addEventListener("click", () => {
       const dialog = $("walkin-dialog");
       if (dialog && typeof dialog.close === "function") dialog.close();
+    });
+  }
+
+  const walkinSessionSearch = document.querySelector(
+    "[data-walkin-session-search]"
+  );
+  if (walkinSessionSearch) {
+    walkinSessionSearch.addEventListener("input", () => {
+      renderWalkInSessionOptions(
+        document.querySelector("[data-walkin-session]")
+      );
     });
   }
 

@@ -252,6 +252,23 @@ test("dashboard cards use the tested formatter and honest labels", () => {
   assert.match(HTML, /revenue counts completed payments only/);
 });
 
+test("walk-in session picker offers a search box that filters options", () => {
+  assert.match(HTML, /data-walkin-session-search/);
+  assert.match(HTML, /data-walkin-session-hint/);
+  assert.match(APP, /function renderWalkInSessionOptions/);
+  assert.match(APP, /walkInSessionOptions\.set\(\s*select,/);
+  assert.match(APP, /No sessions match your search/);
+  assert.match(
+    APP,
+    /walkinSessionSearch\.addEventListener\("input",\s*\(\)\s*=>\s*\{\s*renderWalkInSessionOptions\(/
+  );
+  // The typed search is reset whenever the dialog opens.
+  assert.match(
+    APP,
+    /form\.querySelector\("\[data-walkin-session-search\]"\)[\s\S]{0,80}search\.value = ""/
+  );
+});
+
 test("new doctor accounts can sign in without a forced password change", () => {
   assert.match(
     APP,
