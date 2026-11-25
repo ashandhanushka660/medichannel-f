@@ -19,12 +19,12 @@ Both repositories deploy from their `main` branch.
 - Required env vars (names only):
   - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (Neon; `DB_URL` must be JDBC and include `sslmode=require`)
   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` (independent Base64-encoded 32+ byte keys)
-  - `APP_FRONTEND_ORIGIN` (exact Vercel URL, no wildcard, no trailing slash)
+  - `APP_FRONTEND_ORIGIN` (comma-separated explicit origins; production frontend origins are always allowed)
   - `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD` (first-admin bootstrap; 8+ characters with a letter, a number and a symbol)
   - `APP_DEMO_SEED=false` in production (only enable in isolated staging with `APP_DEMO_PASSWORD=<STRONG_RANDOM_PASSWORD>`)
   - `PORT=8080` (Render also injects `PORT`)
-- WebSocket: `/ws` (STOMP), allowed origin from `APP_FRONTEND_ORIGIN`
-- CORS: frontend origin only
+- WebSocket: `/ws` (STOMP), allowed origins from `APP_FRONTEND_ORIGIN` plus the production frontend origins
+- CORS: configured frontend origins only, plus the production frontend origins
 
 ## Vercel (frontend, primary)
 
