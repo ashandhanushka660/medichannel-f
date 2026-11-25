@@ -562,7 +562,8 @@
 
   const APPT_STATUS = {
     BOOKED: ["Booked", "blue"],
-    ARRIVED: ["Checked in", "green"],
+    CHECKED_IN: ["Checked in", "green"],
+    ARRIVED: ["Arrived", "green"],
     IN_CONSULTATION: ["In consultation", "sky"],
     COMPLETED: ["Completed", "green"],
     CANCELLED: ["Cancelled", "red"],
@@ -698,6 +699,66 @@
 
   function todayISO() {
     return isoDayFormatter.format(new Date());
+  }
+
+  function doctorSessionBookedCount(session) {
+    if (!session) return 0;
+    const max = Number(session.maxAppointments);
+    const remaining = Number(session.remainingAppointments);
+    if (!Number.isFinite(max) || !Number.isFinite(remaining)) return 0;
+    return Math.max(0, max - remaining);
+  }
+
+  function doctorSessionHasBookings(session) {
+    return (
+      Boolean(session) &&
+      session.status !== "CANCELLED" &&
+      doctorSessionBookedCount(session) > 0
+    );
+  }
+
+  function sortDoctorSessions(sessions, today) {
+    return (Array.isArray(sessions) ? sessions : [])
+      .filter((session) => session && session.sessionId)
+      .sort((a, b) => {
+        const aDate = a.sessionDate || "";
+        const bDate = b.sessionDate || "";
+        const aUpcoming = aDate >= today;
+        const bUpcoming = bDate >= today;
+        if (aUpcoming && !bUpcoming) return -1;
+        if (!aUpcoming && bUpcoming) return 1;
+        if (aUpcoming && bUpcoming) {
+          if (aDate !== bDate) return aDate.localeCompare(bDate);
+          return (a.startTime || "").localeCompare(b.startTime || "");
+        }
+        if (aDate !== bDate) return bDate.localeCompare(aDate);
+        return (b.startTime || "").localeCompare(a.startTime || "");
+      });
+  }
+
+  function chooseDefaultDoctorSession(sessions, today, selectedId) {
+    const sorted = sortDoctorSessions(sessions, today);
+    const current = selectedId
+      ? sorted.find((session) => session.sessionId === selectedId)
+      : null;
+    if (current && doctorSessionHasBookings(current)) return current;
+    const bookable = sorted.filter(doctorSessionHasBookings);
+    const todayWithBookings = bookable.find(
+      (session) => session.sessionDate === today
+    );
+    if (todayWithBookings) return todayWithBookings;
+    const upcomingWithBookings = bookable.find(
+      (session) => session.sessionDate >= today
+    );
+    if (upcomingWithBookings) return upcomingWithBookings;
+    if (current) return current;
+    const todaySession = sorted.find((session) => session.sessionDate === today);
+    if (todaySession) return todaySession;
+    const upcoming = sorted.find(
+      (session) => session.sessionDate >= today && session.status !== "CANCELLED"
+    );
+    if (upcoming) return upcoming;
+    return sorted[0] || null;
   }
 
   function isClinicBreakNow() {
@@ -3794,7 +3855,7 @@
 
     // BR-04: One active appointment per patient per session
     const existingActive = (state.appointments || []).find(
-      (a) => a.sessionId === session.sessionId && ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(a.status)
+      (a) => a.sessionId === session.sessionId && ["BOOKED", "CHECKED_IN", "ARRIVED", "IN_CONSULTATION"].includes(a.status)
     );
     if (existingActive) {
       if (error) {
@@ -3946,7 +4007,7 @@
           item &&
           item.sessionDate === today &&
           item.appointmentNumber &&
-          ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(item.status)
+          ["BOOKED", "CHECKED_IN", "ARRIVED", "IN_CONSULTATION"].includes(item.status)
       )
       .sort((a, b) =>
         String(a.sessionStartTime || "").localeCompare(
@@ -4060,7 +4121,7 @@
       state.appointmentsLoaded = true;
       renderAppointments(list);
 
-      const acceptedAppt = list.find((a) => a.acceptanceStatus === "ACCEPTED" && ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(a.status));
+      const acceptedAppt = list.find((a) => a.acceptanceStatus === "ACCEPTED" && ["BOOKED", "CHECKED_IN", "ARRIVED", "IN_CONSULTATION"].includes(a.status));
       let banner = document.querySelector("[data-accepted-banner]");
       if (acceptedAppt) {
         if (!banner) {
@@ -4227,7 +4288,8 @@
 
       if (
         appointment.paymentStatus !== "PAID" &&
-        ["BOOKED", "ARRIVED"].includes(appointment.status)
+        ["BOOKED"].includes(appointment.status) &&
+        appointment.acceptanceStatus === "ACCEPTED"
       ) {
         actions.append(
           actionButton(
@@ -4240,7 +4302,13 @@
       }
 
       const isPhysical = appointment.consultationType === "PHYSICAL";
-      if (isPhysical && appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
+      if (
+        isPhysical &&
+        appointment.status === "BOOKED" &&
+        appointment.paymentStatus === "PAID" &&
+        appointment.acceptanceStatus === "ACCEPTED" &&
+        !appointment.checkedInAt
+      ) {
         actions.append(
           actionButton(
             "Check in",
@@ -4251,9 +4319,19 @@
         );
       }
 
+      if (appointment.status === "CHECKED_IN") {
+        actions.append(
+          el(
+            "span",
+            "text-xs font-semibold text-emerald-800",
+            "Checked in · awaiting arrival"
+          )
+        );
+      }
+
       if (
         appointment.acceptanceStatus === "ACCEPTED" ||
-        ["IN_CONSULTATION", "COMPLETED", "BOOKED", "ARRIVED"].includes(appointment.status)
+        ["IN_CONSULTATION", "COMPLETED", "BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status)
       ) {
         const online = appointment.consultationType === "ONLINE";
         const consultLabel =
@@ -5103,37 +5181,17 @@
       let sessions = await MC.doctorSessions();
       if (!Array.isArray(sessions)) sessions = [];
 
-      // Sort sessions chronologically: upcoming/today first (ascending), past sessions last (descending)
-      const todayStr = new Date().toISOString().slice(0, 10);
-      sessions.sort((a, b) => {
-        const aDate = a.sessionDate || "";
-        const bDate = b.sessionDate || "";
-        const aIsUpcoming = aDate >= todayStr;
-        const bIsUpcoming = bDate >= todayStr;
-        if (aIsUpcoming && !bIsUpcoming) return -1;
-        if (!aIsUpcoming && bIsUpcoming) return 1;
-        if (aIsUpcoming && bIsUpcoming) {
-          if (aDate !== bDate) return aDate.localeCompare(bDate);
-          return (a.startTime || "").localeCompare(b.startTime || "");
-        }
-        if (aDate !== bDate) return bDate.localeCompare(aDate);
-        return (b.startTime || "").localeCompare(a.startTime || "");
-      });
+      const today = todayISO();
+      sessions = sortDoctorSessions(sessions, today);
 
       state.doctor.sessions = sessions;
       state.doctor.sessionsLoaded = true;
 
-      // Smart default: keep current if valid in list, else today's session, else first upcoming, else sessions[0]
-      let defaultSession = sessions.find((s) => s.sessionId === state.doctor.sessionId);
-      if (!defaultSession) {
-        defaultSession = sessions.find((s) => s.sessionDate === todayStr);
-      }
-      if (!defaultSession) {
-        defaultSession = sessions.find((s) => s.sessionDate >= todayStr);
-      }
-      if (!defaultSession && sessions.length > 0) {
-        defaultSession = sessions[0];
-      }
+      const defaultSession = chooseDefaultDoctorSession(
+        sessions,
+        today,
+        state.doctor.sessionId
+      );
 
       const chosenSessionId = defaultSession ? defaultSession.sessionId : "";
       state.doctor.sessionId = chosenSessionId;
@@ -5151,7 +5209,10 @@
               "–" +
               formatTime(session.endTime) +
               " · " +
-              (session.consultationType === "ONLINE" ? "Online" : "Physical")
+              (session.consultationType === "ONLINE" ? "Online" : "Physical") +
+              " · " +
+              doctorSessionBookedCount(session) +
+              " booked"
           );
           option.value = session.sessionId;
           sel.append(option);
@@ -5351,8 +5412,10 @@
       const arrival = document.createElement("td");
       arrival.dataset.label = "Check-in";
       arrival.textContent = appointment.arrivedAt
-        ? "Checked in " + formatDateTime(appointment.arrivedAt).slice(-5)
-        : "Not arrived";
+        ? "Arrived " + formatDateTime(appointment.arrivedAt).slice(-5)
+        : appointment.checkedInAt
+          ? "Checked in " + formatDateTime(appointment.checkedInAt).slice(-5)
+          : "Not checked in";
       row.append(arrival);
 
       const status = document.createElement("td");
@@ -5392,6 +5455,8 @@
       actions.dataset.label = "Actions";
       actions.className = "flex flex-wrap items-center justify-end gap-2";
 
+      const isOnline = appointment.consultationType === "ONLINE" || (session && session.consultationType === "ONLINE");
+
       if (appointment.status === "BOOKED") {
         if (appointment.acceptanceStatus !== "ACCEPTED") {
           actions.append(
@@ -5408,49 +5473,71 @@
               appointment.appointmentId
             )
           );
+        } else if (appointment.paymentStatus !== "PAID") {
+          actions.append(
+            el("span", "text-xs font-semibold text-orange-800", "Payment pending"),
+            doctorAction(
+              "No-show",
+              "bg-white border-line text-slate2 hover:bg-snow",
+              "noshow",
+              appointment.appointmentId
+            )
+          );
+        } else if (isOnline) {
+          actions.append(
+            doctorAction(
+              "Start",
+              "bg-brand border-brand text-white hover:bg-brand-d",
+              "start",
+              appointment.appointmentId
+            ),
+            doctorAction(
+              "No-show",
+              "bg-white border-line text-slate2 hover:bg-snow",
+              "noshow",
+              appointment.appointmentId
+            )
+          );
         } else {
-          const isOnline = appointment.consultationType === "ONLINE" || (session && session.consultationType === "ONLINE");
-          if (isOnline) {
-            // Online consultation goes directly from BOOKED to IN_CONSULTATION (skips ARRIVED - BR-08)
-            if (appointment.paymentStatus === "PAID") {
-              actions.append(
-                doctorAction(
-                  "Start",
-                  "bg-brand border-brand text-white hover:bg-brand-d",
-                  "start",
-                  appointment.appointmentId
-                )
-              );
-            } else {
-              actions.append(
-                el("span", "text-xs font-semibold text-orange-800", "Payment pending")
-              );
-            }
-            actions.append(
-              doctorAction(
-                "No-show",
-                "bg-white border-line text-slate2 hover:bg-snow",
-                "noshow",
-                appointment.appointmentId
-              )
-            );
-          } else {
-            // Physical consultation: BOOKED -> ARRIVED (at reception / mark arrived)
-            actions.append(
-              doctorAction(
-                "Mark arrived",
-                "bg-white border-line text-slate2 hover:bg-snow",
-                "arrive",
-                appointment.appointmentId
-              ),
-              doctorAction(
-                "No-show",
-                "bg-white border-line text-slate2 hover:bg-snow",
-                "noshow",
-                appointment.appointmentId
-              )
-            );
-          }
+          actions.append(
+            el("span", "text-xs font-semibold text-orange-800", "Awaiting check-in"),
+            doctorAction(
+              "No-show",
+              "bg-white border-line text-slate2 hover:bg-snow",
+              "noshow",
+              appointment.appointmentId
+            )
+          );
+        }
+      } else if (appointment.status === "CHECKED_IN") {
+        if (appointment.paymentStatus !== "PAID") {
+          actions.append(
+            el("span", "text-xs font-semibold text-orange-800", "Collect payment first")
+          );
+        } else if (isOnline) {
+          actions.append(
+            doctorAction(
+              "Start",
+              "bg-brand border-brand text-white hover:bg-brand-d",
+              "start",
+              appointment.appointmentId
+            )
+          );
+        } else {
+          actions.append(
+            doctorAction(
+              "Mark arrived",
+              "bg-white border-line text-slate2 hover:bg-snow",
+              "arrive",
+              appointment.appointmentId
+            ),
+            doctorAction(
+              "No-show",
+              "bg-white border-line text-slate2 hover:bg-snow",
+              "noshow",
+              appointment.appointmentId
+            )
+          );
         }
       } else if (appointment.status === "ARRIVED") {
         if (appointment.paymentStatus === "PAID") {
@@ -5471,14 +5558,6 @@
             )
           );
         }
-        actions.append(
-          doctorAction(
-            "No-show",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "noshow",
-            appointment.appointmentId
-          )
-        );
       } else if (appointment.status === "IN_CONSULTATION") {
         actions.append(
           doctorAction(
@@ -5574,8 +5653,15 @@
         : appointmentOrId;
 
     if (!appointment) return false;
-    if (!["BOOKED", "ARRIVED"].includes(appointment.status)) return false;
+    if (!["BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status)) return false;
     if (appointment.consultationType !== "ONLINE") return false;
+    if (appointment.acceptanceStatus !== "ACCEPTED") {
+      setAppMessage(
+        "Accept the appointment before opening the consultation room.",
+        "warning"
+      );
+      return false;
+    }
 
     // A locked room without an explanation looks like a frozen chat. Tell the
     // doctor exactly what is still missing instead of silently returning.
@@ -6085,7 +6171,11 @@
     if (save) save.disabled = true;
 
     try {
-      if (appointment.status === "BOOKED" || appointment.status === "ARRIVED") {
+      if (
+        appointment.acceptanceStatus === "ACCEPTED" &&
+        appointment.paymentStatus === "PAID" &&
+        ["BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status)
+      ) {
         setStatus(status, "Starting consultation…");
         try {
           await MC.startConsultation(appointment.appointmentId);
@@ -6363,7 +6453,7 @@
     if (
       S && S.role === "DOCTOR" &&
       appointment.consultationType === "ONLINE" &&
-      ["BOOKED", "ARRIVED"].includes(appointment.status)
+      ["BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status)
     ) {
       await ensureDoctorConsultationStarted(appointment);
       const refreshed = findDoctorAppointment(appointmentId);
@@ -6569,7 +6659,7 @@
     const canStart =
       doctor &&
       appointment.consultationType === "ONLINE" &&
-      ["BOOKED", "ARRIVED"].includes(appointment.status);
+      ["BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status);
     const paid = appointment.paymentStatus === "PAID";
 
     let message;
@@ -6710,7 +6800,7 @@
     if (
       S.role === "DOCTOR" &&
       appointment.consultationType === "ONLINE" &&
-      ["BOOKED", "ARRIVED"].includes(appointment.status)
+      ["BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status)
     ) {
       const paid = appointment.paymentStatus === "PAID";
       const button = chatActionButton(
@@ -6869,7 +6959,7 @@
         subscribeConsultation(state.consult.appointment);
         return;
       }
-      if (!["BOOKED", "ARRIVED"].includes(status)) {
+      if (!["BOOKED", "CHECKED_IN", "ARRIVED"].includes(status)) {
         stopConsultationStatusPolling();
         return;
       }
@@ -6907,7 +6997,7 @@
 
     // Never send an unauthorised STOMP subscription for a booked/closed room.
     if (appointment.status !== "IN_CONSULTATION") {
-      if (["BOOKED", "ARRIVED"].includes(appointment.status)) {
+      if (["BOOKED", "CHECKED_IN", "ARRIVED"].includes(appointment.status)) {
         startConsultationStatusPolling(id);
       }
       return;
@@ -6979,7 +7069,7 @@
           state.consult.chatSub = null;
           state.consult.typingSub = null;
           state.consult.statusSub = null;
-          if (["BOOKED", "ARRIVED"].includes(payload.status)) {
+          if (["BOOKED", "CHECKED_IN", "ARRIVED"].includes(payload.status)) {
             startConsultationStatusPolling(id);
           }
         }
@@ -7103,6 +7193,7 @@
       const record = await MC.summary(appointmentId);
       if (!record) {
         state.consult.summary = null;
+        if (feedback) feedback.hidden = true;
         if (summary) summary.hidden = true;
         if (empty) {
           empty.hidden = false;
@@ -7115,6 +7206,15 @@
       }
 
       state.consult.summary = record;
+
+      if (feedback) {
+        feedback.hidden = !(
+          S &&
+          S.role === "CUSTOMER" &&
+          appointment &&
+          appointment.status === "COMPLETED"
+        );
+      }
 
       if (empty) empty.hidden = true;
       if (summary) summary.hidden = false;
@@ -7151,6 +7251,7 @@
       }
 
       state.consult.summary = null;
+      if (feedback) feedback.hidden = true;
       if (summary) summary.hidden = true;
       if (empty) {
         empty.hidden = false;
