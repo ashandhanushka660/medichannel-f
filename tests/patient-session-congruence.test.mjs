@@ -16,7 +16,9 @@ const HTML_SOURCE = readFileSync(
 );
 
 function functionSource(name) {
-  const start = APP_SOURCE.indexOf(`function ${name}(`);
+  const asyncStart = APP_SOURCE.indexOf(`async function ${name}(`);
+  const plainStart = APP_SOURCE.indexOf(`function ${name}(`);
+  const start = asyncStart >= 0 ? asyncStart : plainStart;
   assert.ok(start >= 0, `${name} was not found`);
 
   let depth = 0;
@@ -279,4 +281,130 @@ test("session filters no longer carry a period but bookings do", () => {
   assert.match(API_SOURCE, /body: \{ sessionId, reason, period \}/);
   assert.match(APP_SOURCE, /The selected period does not match this session\./);
   assert.match(APP_SOURCE, /isClinicBreakNow\(\)/);
+});
+
+function loadConfirmBooking(values, session) {
+  const error = { hidden: false, textContent: "" };
+  const button = { disabled: false };
+  const calls = [];
+  const document = {
+    querySelector: (selector) => {
+      if (selector === "[data-booking-error]") return error;
+      if (selector === "[data-booking-confirm]") return button;
+      return null;
+    },
+  };
+  const $ = (id) => ({ value: values[id] || "" });
+  const state = { selectedSession: session, appointments: [] };
+
+  const confirmBooking = new Function(
+    "document",
+    "$",
+    "state",
+    "S",
+    "MC",
+    "MAX_REASON_LENGTH",
+    "formatDate",
+    "sessionPeriodValue",
+    "isClinicBreakNow",
+    "bookingClosed",
+    "saveIntent",
+    "nav",
+    "showBookingSuccess",
+    "clearIntent",
+    "loadAppointments",
+    "loadSessions",
+    `${functionSource("confirmBooking")}\nreturn confirmBooking;`
+  )(
+    document,
+    $,
+    state,
+    { role: "CUSTOMER" },
+    {
+      bookAppointment: async (...args) => {
+        calls.push(args);
+        return { appointmentId: "a1" };
+      },
+    },
+    500,
+    (value) => String(value),
+    () => "MORNING",
+    () => false,
+    () => false,
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    async () => {},
+    async () => {}
+  );
+
+  return { confirmBooking, error, calls };
+}
+
+test("confirm booking has a calendar date that stays separate from the booking payload", () => {
+  const formStart = HTML_SOURCE.indexOf('<div data-booking-form');
+  const dateInput = HTML_SOURCE.match(/<input id="booking-date"[^>]*type="date"[^>]*>/);
+  assert.ok(dateInput, "the booking date input was not found");
+  assert.ok(formStart >= 0 && HTML_SOURCE.indexOf('id="booking-date"') > formStart);
+  assert.ok(
+    HTML_SOURCE.indexOf('id="booking-date"') < HTML_SOURCE.indexOf('id="index-bp"')
+  );
+  assert.match(HTML_SOURCE, /<label for="booking-date"[^>]*>Date \*<\/label>/);
+  assert.match(HTML_SOURCE, /data-booking-date-confirmed/);
+
+  assert.match(APP_SOURCE, /bookingDateInput\.value = state\.bookingDate/);
+  assert.match(APP_SOURCE, /saveIntent\(session, reason, period, bookingDate\)/);
+  assert.match(APP_SOURCE, /date: intent\.date/);
+  assert.match(APP_SOURCE, /event\.target\.id === "booking-date"/);
+  assert.match(APP_SOURCE, /searchDate\.value = date/);
+  assert.match(APP_SOURCE, /state\.sessionsLoaded = false/);
+  assert.match(APP_SOURCE, /void loadSessions\(\)/);
+  assert.match(
+    APP_SOURCE,
+    /formatDate\(\s*appointment\.sessionDate \|\| \(session && session\.sessionDate\)\s*\)/
+  );
+  assert.match(API_SOURCE, /body: \{ sessionId, reason, period \}/);
+});
+
+test("a date that does not match the selected session blocks booking", async () => {
+  const { confirmBooking, error, calls } = loadConfirmBooking(
+    {
+      "booking-date": "2026-11-25",
+      "index-rs": "Chest pain for three days",
+      "index-bp": "MORNING",
+    },
+    {
+      sessionId: "session-1",
+      sessionDate: "2026-11-26",
+      startTime: "07:00",
+      remainingAppointments: 2,
+    }
+  );
+
+  await confirmBooking();
+
+  assert.equal(error.hidden, false);
+  assert.match(error.textContent, /selected date does not match this session/);
+  assert.deepEqual(calls, []);
+});
+
+test("a matching date still books with only session, reason and period", async () => {
+  const { confirmBooking, calls } = loadConfirmBooking(
+    {
+      "booking-date": "2026-11-26",
+      "index-rs": "Chest pain for three days",
+      "index-bp": "MORNING",
+    },
+    {
+      sessionId: "session-1",
+      sessionDate: "2026-11-26",
+      startTime: "07:00",
+      remainingAppointments: 2,
+    }
+  );
+
+  await confirmBooking();
+
+  assert.deepEqual(calls, [["session-1", "Chest pain for three days", "MORNING"]]);
 });

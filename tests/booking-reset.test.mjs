@@ -45,6 +45,7 @@ function makeHarness() {
   const state = {
     booking: { appointmentId: "old-booking" },
     selectedSession: { sessionId: "old-session" },
+    bookingDate: "2026-11-24",
   };
   const $ = (id) => document.querySelector(`#${id}`);
 
@@ -61,6 +62,7 @@ function makeHarness() {
 test("logout, expiry and invalid sessions all clear the booking panel", () => {
   assert.match(functionSource("clearBookingPanel"), /state\.booking = null/);
   assert.match(functionSource("clearBookingPanel"), /state\.selectedSession = null/);
+  assert.match(functionSource("clearBookingPanel"), /state\.bookingDate = ""/);
   assert.match(functionSource("clearBookingPanel"), /data-booking-success/);
   assert.match(functionSource("logout"), /clearBookingPanel\(\)/);
   assert.match(functionSource("handleSessionExpired"), /clearBookingPanel\(\)/);
@@ -77,6 +79,8 @@ test("clearing the booking panel removes another patient's confirmation", () => 
   node("[data-booking-estimate]").textContent = "Tomorrow 09:00";
   node("[data-booking-message]").textContent = "Paid by card. You’re ready when the doctor calls you.";
   node("#index-rs").value = "A private reason from the previous account";
+  node("#booking-date").value = "2026-11-24";
+  node("[data-booking-date-confirmed]").textContent = "24 Nov";
   const pay = node("[data-booking-pay]", {
     hidden: true,
     disabled: false,
@@ -88,6 +92,7 @@ test("clearing the booking panel removes another patient's confirmation", () => 
 
   assert.equal(state.booking, null);
   assert.equal(state.selectedSession, null);
+  assert.equal(state.bookingDate, "");
   assert.equal(node("[data-booking-title]").textContent, "Book a session");
   assert.equal(node("[data-booking-meta]").textContent, "Choose a session to continue.");
   assert.equal(node("[data-booking-form]").hidden, true);
@@ -97,6 +102,8 @@ test("clearing the booking panel removes another patient's confirmation", () => 
   assert.equal(node("[data-booking-estimate]").textContent, "—");
   assert.equal(node("[data-booking-message]").textContent, "");
   assert.equal(node("#index-rs").value, "");
+  assert.equal(node("#booking-date").value, "");
+  assert.equal(node("[data-booking-date-confirmed]").textContent, "—");
   assert.equal(node("[data-booking-error]").hidden, true);
   assert.equal(pay.hidden, true);
   assert.equal(pay.disabled, false);

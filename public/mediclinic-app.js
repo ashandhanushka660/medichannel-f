@@ -623,6 +623,7 @@
       },
     },
     selectedSession: null,
+    bookingDate: "",
     booking: null,
     appointments: [],
     appointmentsLoaded: false,
@@ -2322,12 +2323,13 @@
   // Booking intent (login gate with return)
   // ---------------------------------------------------------------
 
-  function saveIntent(session, reason, period) {
+  function saveIntent(session, reason, period, date) {
     const intent = {
       sessionId: session && session.sessionId,
       session: session || null,
       reason: reason || "",
       period: period || "",
+      date: date || "",
     };
 
     state.pendingIntent = intent;
@@ -2372,6 +2374,7 @@
       selectSession(session, {
         reason: intent.reason,
         period: intent.period,
+        date: intent.date,
       });
     }
 
@@ -3662,6 +3665,7 @@
   function clearBookingPanel() {
     state.booking = null;
     state.selectedSession = null;
+    state.bookingDate = "";
 
     const title = document.querySelector("[data-booking-title]");
     if (title) title.textContent = "Book a session";
@@ -3677,6 +3681,9 @@
 
     const reason = $("index-rs");
     if (reason) reason.value = "";
+
+    const bookingDate = $("booking-date");
+    if (bookingDate) bookingDate.value = "";
 
     const period = $("index-bp");
     if (period) period.value = "";
@@ -3694,6 +3701,8 @@
 
     const reference = document.querySelector("[data-booking-reference]");
     if (reference) reference.textContent = "—";
+    const confirmedDate = document.querySelector("[data-booking-date-confirmed]");
+    if (confirmedDate) confirmedDate.textContent = "—";
     const number = document.querySelector("[data-booking-number]");
     if (number) number.textContent = "—";
     const created = document.querySelector("[data-booking-created]");
@@ -3721,6 +3730,7 @@
 
     const settings = options || {};
     state.selectedSession = session;
+    state.bookingDate = settings.date || session.sessionDate || "";
     state.booking = null;
 
     const title = document.querySelector("[data-booking-title]");
@@ -3729,6 +3739,7 @@
     const success = document.querySelector("[data-booking-success]");
     const note = document.querySelector("[data-booking-note]");
     const reason = $("index-rs");
+    const bookingDateInput = $("booking-date");
     const periodSelect = $("index-bp");
     const error = document.querySelector("[data-booking-error]");
 
@@ -3765,6 +3776,7 @@
             : "You will be asked to log in, then returned to this booking.";
     }
 
+    if (bookingDateInput) bookingDateInput.value = state.bookingDate;
     if (reason && settings.reason) reason.value = settings.reason;
     if (periodSelect) {
       periodSelect.value = settings.period || sessionPeriodValue(session);
@@ -3787,13 +3799,25 @@
     const session = state.selectedSession;
     const error = document.querySelector("[data-booking-error]");
     const reasonInput = $("index-rs");
+    const bookingDateInput = $("booking-date");
     const periodInput = $("index-bp");
     const button = document.querySelector("[data-booking-confirm]");
 
     if (!session) return;
 
     const reason = reasonInput ? reasonInput.value.trim() : "";
+    const bookingDate = bookingDateInput ? bookingDateInput.value : "";
     const period = periodInput ? periodInput.value : "";
+
+    if (!bookingDate || bookingDate !== session.sessionDate) {
+      if (error) {
+        error.hidden = false;
+        error.textContent =
+          "The selected date does not match this session. Choose a session on " +
+          formatDate(bookingDate || session.sessionDate) + ".";
+      }
+      return;
+    }
 
     if (reason.length < 5) {
       if (error) {
@@ -3840,7 +3864,7 @@
     }
 
     if (!S) {
-      saveIntent(session, reason, period);
+      saveIntent(session, reason, period, bookingDate);
       nav("login");
       return;
     }
@@ -3920,6 +3944,7 @@
     const success = document.querySelector("[data-booking-success]");
     const wasHidden = success ? success.hidden : true;
     const reference = document.querySelector("[data-booking-reference]");
+    const confirmedDate = document.querySelector("[data-booking-date-confirmed]");
     const number = document.querySelector("[data-booking-number]");
     const created = document.querySelector("[data-booking-created]");
     const estimate = document.querySelector("[data-booking-estimate]");
@@ -3930,6 +3955,11 @@
     if (form) form.hidden = true;
     if (success) success.hidden = false;
     if (reference) reference.textContent = referenceOf(appointment.bookingReference);
+    if (confirmedDate) {
+      confirmedDate.textContent = formatDate(
+        appointment.sessionDate || (session && session.sessionDate)
+      );
+    }
     if (number) number.textContent = "#" + appointment.appointmentNumber;
     if (created) {
       created.textContent = appointment.bookedAt
@@ -10480,6 +10510,24 @@
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.id === "booking-date") {
+      const date = event.target.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+
+      clearBookingPanel();
+      state.bookingDate = date;
+      event.target.value = date;
+      const searchDate = $("index-dt");
+      if (searchDate) searchDate.value = date;
+      const note = document.querySelector("[data-booking-note]");
+      if (note) {
+        note.textContent = "Choose a session on " + formatDate(date) + ".";
+      }
+      state.sessionsLoaded = false;
+      void loadSessions();
+      return;
+    }
+
     if (event.target.id === "index-range") {
       state.sessionsLoaded = false;
       void loadSessions();

@@ -415,3 +415,21 @@ test("me() also dedupes concurrent session checks", async () => {
   assert.deepEqual(second, { role: "DOCTOR" });
   assert.equal(calls.length, 1);
 });
+
+test("patient booking posts only session, reason and period", async () => {
+  const { MC, calls } = loadApi({
+    tabToken: "tab-token",
+    fetchImpl: () => jsonResponse(200, { appointmentId: "a1" }),
+  });
+
+  await MC.bookAppointment("session-1", "Chest pain for three days", "MORNING");
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "/api/backend/appointments");
+  assert.equal(calls[0].settings.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].settings.body), {
+    sessionId: "session-1",
+    reason: "Chest pain for three days",
+    period: "MORNING",
+  });
+});
