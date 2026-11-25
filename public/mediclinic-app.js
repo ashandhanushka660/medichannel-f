@@ -3797,6 +3797,39 @@
     if (reason) reason.focus({ preventScroll: true });
   }
 
+  function applyBookingDate(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+
+    clearBookingPanel();
+    state.bookingDate = date;
+
+    const form = document.querySelector("[data-booking-form]");
+    if (form) form.hidden = false;
+
+    const bookingDateInput = $("booking-date");
+    if (bookingDateInput) bookingDateInput.value = date;
+
+    const confirm = document.querySelector("[data-booking-confirm]");
+    if (confirm) confirm.disabled = true;
+
+    const title = document.querySelector("[data-booking-title]");
+    if (title) title.textContent = "Book a session";
+
+    const meta = document.querySelector("[data-booking-meta]");
+    if (meta) meta.textContent = formatDate(date);
+
+    const note = document.querySelector("[data-booking-note]");
+    if (note) {
+      note.textContent = "Choose a session on " + formatDate(date) + ".";
+    }
+
+    const searchDate = $("index-dt");
+    if (searchDate) searchDate.value = date;
+
+    state.sessionsLoaded = false;
+    void loadSessions();
+  }
+
   async function confirmBooking() {
     const session = state.selectedSession;
     const error = document.querySelector("[data-booking-error]");
@@ -10552,20 +10585,7 @@
 
   document.addEventListener("change", (event) => {
     if (event.target.id === "booking-date") {
-      const date = event.target.value;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-
-      clearBookingPanel();
-      state.bookingDate = date;
-      event.target.value = date;
-      const searchDate = $("index-dt");
-      if (searchDate) searchDate.value = date;
-      const note = document.querySelector("[data-booking-note]");
-      if (note) {
-        note.textContent = "Choose a session on " + formatDate(date) + ".";
-      }
-      state.sessionsLoaded = false;
-      void loadSessions();
+      applyBookingDate(event.target.value);
       return;
     }
 

@@ -212,7 +212,7 @@ test("the booking confirmation keeps showing the allocated queue number", () => 
   );
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261125e"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261125f"/
   );
 });
 
@@ -407,4 +407,82 @@ test("a matching date still books with only session, reason and period", async (
   await confirmBooking();
 
   assert.deepEqual(calls, [["session-1", "Chest pain for three days", "MORNING"]]);
+});
+
+function makeDateHarness() {
+  const nodes = new Map();
+  const node = (key, extras = {}) => {
+    if (!nodes.has(key)) {
+      nodes.set(key, {
+        hidden: false,
+        textContent: "",
+        disabled: false,
+        value: "",
+        dataset: {},
+        ...extras,
+      });
+    }
+    return nodes.get(key);
+  };
+  const document = { querySelector: (selector) => node(selector) };
+  const $ = (id) => document.querySelector(`#${id}`);
+  const state = {
+    selectedSession: { sessionId: "old-session" },
+    booking: { appointmentId: "old-booking" },
+    bookingDate: "2026-11-24",
+    sessionsLoaded: true,
+  };
+  let loads = 0;
+
+  const clearBookingPanel = () => {
+    state.selectedSession = null;
+    state.booking = null;
+    state.bookingDate = "";
+    document.querySelector("[data-booking-form]").hidden = true;
+    document.querySelector("#booking-date").value = "";
+    document.querySelector("[data-booking-confirm]").disabled = false;
+  };
+
+  const applyBookingDate = new Function(
+    "document",
+    "$",
+    "state",
+    "formatDate",
+    "loadSessions",
+    "clearBookingPanel",
+    `${functionSource("applyBookingDate")}\nreturn applyBookingDate;`
+  )(
+    document,
+    $,
+    state,
+    (value) => String(value),
+    () => {
+      loads += 1;
+    },
+    clearBookingPanel
+  );
+
+  return { applyBookingDate, node, state, loads: () => loads };
+}
+
+test("choosing a calendar date keeps the booking form open", () => {
+  assert.match(
+    APP_SOURCE,
+    /event\.target\.id === "booking-date"[\s\S]{0,80}applyBookingDate\(event\.target\.value\)/
+  );
+
+  const harness = makeDateHarness();
+
+  harness.applyBookingDate("2026-11-26");
+
+  assert.equal(harness.node("[data-booking-form]").hidden, false);
+  assert.equal(harness.node("#booking-date").value, "2026-11-26");
+  assert.equal(harness.state.bookingDate, "2026-11-26");
+  assert.equal(harness.state.selectedSession, null);
+  assert.equal(harness.state.booking, null);
+  assert.equal(harness.node("[data-booking-confirm]").disabled, true);
+  assert.equal(harness.node("#index-dt").value, "2026-11-26");
+  assert.match(harness.node("[data-booking-note]").textContent, /2026-11-26/);
+  assert.equal(harness.state.sessionsLoaded, false);
+  assert.equal(harness.loads(), 1);
 });
