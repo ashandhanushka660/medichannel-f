@@ -433,3 +433,17 @@ test("patient booking posts only session, reason and period", async () => {
     period: "MORNING",
   });
 });
+
+test("chat messages use the REST fallback endpoint", async () => {
+  const { MC, calls } = loadApi({
+    tabToken: "tab-token",
+    fetchImpl: () => jsonResponse(201, { messageId: "m1" }),
+  });
+
+  await MC.sendChatMessage("appointment-1", "Hello doctor");
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "/api/backend/appointments/appointment-1/chat/messages");
+  assert.equal(calls[0].settings.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].settings.body), { content: "Hello doctor" });
+});

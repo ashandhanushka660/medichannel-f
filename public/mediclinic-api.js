@@ -565,6 +565,18 @@
       );
     },
 
+    sendChatMessage(appointmentId, content) {
+      return request(
+        "appointments/" +
+          encodeURIComponent(appointmentId) +
+          "/chat/messages",
+        {
+          method: "POST",
+          body: { content },
+        }
+      );
+    },
+
     // Doctor console -------------------------------------------------
     doctorProfile() {
       return request("doctor/profile");

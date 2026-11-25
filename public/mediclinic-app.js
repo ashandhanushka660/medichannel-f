@@ -658,6 +658,7 @@
       typingSub: null,
       statusSub: null,
       statusPoll: null,
+      chatPoll: null,
     },
     queueSub: null,
     sessionsSub: null,
@@ -1902,6 +1903,7 @@
       }
       if (activeView === "consult") {
         stopConsultationStatusPolling();
+        stopChatPolling();
         unsubscribe("chat");
         unsubscribe("typing");
         unsubscribe("status");
@@ -6883,6 +6885,8 @@
     log.style.opacity = "0.7";
 
     try {
+      const nearBottom =
+        log.scrollHeight - log.scrollTop - log.clientHeight < 80;
       const messages = await MC.chatHistory(appointmentId);
       log.replaceChildren();
 
@@ -6895,7 +6899,7 @@
       }
 
       messages.forEach((message) => appendChatMessage(message));
-      log.scrollTop = log.scrollHeight;
+      if (nearBottom || !settings.preserveScroll) log.scrollTop = log.scrollHeight;
     } catch (error) {
       const message = (error && error.message) ||
         "The conversation could not be loaded.";
@@ -7012,11 +7016,46 @@
     state.consult.statusPoll = setInterval(() => void check(), 4000);
   }
 
+  function stopChatPolling() {
+    if (state.consult.chatPoll) {
+      clearInterval(state.consult.chatPoll);
+      state.consult.chatPoll = null;
+    }
+  }
+
+  function startChatPolling(appointmentId) {
+    stopChatPolling();
+
+    const poll = async () => {
+      const sameRoom =
+        String(state.consult.appointmentId) === String(appointmentId);
+      if (
+        activeView !== "consult" ||
+        !sameRoom ||
+        !state.consult.appointment ||
+        !["IN_CONSULTATION", "COMPLETED"].includes(
+          state.consult.appointment.status
+        )
+      ) {
+        stopChatPolling();
+        return;
+      }
+
+      await loadChatHistory(appointmentId, {
+        force: true,
+        preserveScroll: true,
+      });
+    };
+
+    state.consult.chatPoll = setInterval(() => void poll(), 4000);
+  }
+
   function subscribeConsultation(appointment) {
     if (!appointment) return;
     const id = appointment.appointmentId;
 
     stopConsultationStatusPolling();
+    stopChatPolling();
     unsubscribe("chat");
     unsubscribe("typing");
     unsubscribe("status");
@@ -7032,6 +7071,8 @@
       }
       return;
     }
+
+    startChatPolling(id);
 
     state.consult.chatSub = subscribe(
       "chat",
@@ -7092,6 +7133,7 @@
         renderConsultHeader(state.consult.appointment);
 
         if (payload.status !== "IN_CONSULTATION") {
+          stopChatPolling();
           unsubscribe("chat");
           unsubscribe("typing");
           unsubscribe("status");
@@ -7149,12 +7191,11 @@
     if (sendButton) sendButton.disabled = true;
 
     try {
-      await publish("/app/appointments/" + appointment.appointmentId + "/chat", {
-        content,
-      });
+      await MC.sendChatMessage(appointment.appointmentId, content);
 
       input.value = "";
       void sendTyping(false);
+      void loadChatHistory(appointment.appointmentId, { force: true });
     } catch (error) {
       setAppMessage(error.message || "Your message could not be sent. Please try again.");
     } finally {

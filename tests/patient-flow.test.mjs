@@ -205,11 +205,21 @@ test("chat publishing waits for the real connection instead of throwing a raw tr
   assert.match(APP_SOURCE, /notifyConnected\(\);/);
 });
 
-test("sending a chat message holds the message until the socket is ready and disables double sends", () => {
-  assert.match(APP_SOURCE, /async function sendChatMessage\(\)/);
-  assert.match(APP_SOURCE, /await publish\("\/app\/appointments\/" \+ appointment\.appointmentId \+ "\/chat"/);
-  assert.match(APP_SOURCE, /if \(sendButton\) sendButton\.disabled = true;/);
+test("sending a chat message uses the REST fallback and disables double sends", () => {
+  const send = APP_SOURCE.slice(
+    APP_SOURCE.indexOf("async function sendChatMessage()"),
+    APP_SOURCE.indexOf("async function sendTyping(")
+  );
+
+  assert.match(send, /async function sendChatMessage\(\)/);
+  assert.match(send, /await MC\.sendChatMessage\(appointment\.appointmentId, content\)/);
+  assert.doesNotMatch(send, /publish\(/);
+  assert.match(send, /if \(sendButton\) sendButton\.disabled = true;/);
   assert.match(APP_SOURCE, /async function sendTyping\(typing\)/);
+  assert.match(APP_SOURCE, /function startChatPolling\(appointmentId\)/);
+  assert.match(APP_SOURCE, /setInterval\(\(\) => void poll\(\), 4000\)/);
+  assert.match(APP_SOURCE, /preserveScroll: true/);
+  assert.match(APP_SOURCE, /void loadChatHistory\(appointmentId, \{ force: true \}\)/);
 });
 
 test("the empty chat placeholder addresses each role correctly", () => {
