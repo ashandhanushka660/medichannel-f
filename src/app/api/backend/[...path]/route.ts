@@ -37,6 +37,25 @@ async function forwardRequest(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // Old cached copies of the public shell still call the per-session queue
+  // endpoint once per card. Reject those unauthenticated calls here instead
+  // of forwarding a 401 storm to a small backend dyno. Signed-in doctor
+  // views carry a token and continue to reach the real queue service.
+  const isPerSessionQueue =
+    path[0] === "sessions" && path.length >= 3 && path[2] === "queue";
+  if (isPerSessionQueue && !token) {
+    const response = NextResponse.json(
+      {
+        success: false,
+        errorCode: "UNAUTHORIZED",
+        message: "Authentication is required.",
+      },
+      { status: 401, headers: { "Cache-Control": "no-store" } }
+    );
+    clearAuthCookie(response);
+    return response;
+  }
+
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("Content-Type", contentType);
 

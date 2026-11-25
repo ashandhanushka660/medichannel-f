@@ -32,3 +32,14 @@ test("the proxy clears legacy auth cookies when the backend responds with 401", 
   assert.match(ROUTE, /status === 401/);
   assert.match(ROUTE, /clearAuthCookie\(response\)/);
 });
+
+test("unauthenticated per-session queue calls are rejected before the backend", () => {
+  assert.match(
+    ROUTE,
+    /path\[0\] === "sessions" && path\.length >= 3 && path\[2\] === "queue"/
+  );
+  assert.match(ROUTE, /isPerSessionQueue && !token/);
+  const guard = ROUTE.indexOf("isPerSessionQueue && !token");
+  const fetchCall = ROUTE.indexOf("await fetch(targetUrl");
+  assert.ok(guard >= 0 && fetchCall > guard, "guard must run before fetch");
+});
