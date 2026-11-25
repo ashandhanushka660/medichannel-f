@@ -49,9 +49,9 @@
   const CLINIC_END = "16:00";
   const CLINIC_HOURS = 8;
   const MORNING_START = "07:00";
-  const MORNING_END = "09:30";
-  const AFTERNOON_START = "12:00";
-  const AFTERNOON_END = "14:30";
+  const MORNING_END = "11:00";
+  const EVENING_START = "13:00";
+  const EVENING_END = "15:00";
   const SLOT_MINUTES = 5;
   const MAX_PATIENTS_PER_SESSION = 30;
   const MAX_PATIENTS_PER_DAY = 60;
@@ -59,11 +59,13 @@
   const ONLINE_BOOKING_CLOSE_MINUTES = 30;
   const CLINIC_WINDOWS = [
     { start: MORNING_START, end: MORNING_END, label: "Morning" },
-    { start: AFTERNOON_START, end: AFTERNOON_END, label: "Afternoon" },
+    { start: EVENING_START, end: EVENING_END, label: "Evening" },
   ];
   const CLINIC_WINDOW_LABEL =
     MORNING_START + "–" + MORNING_END + " or " +
-    AFTERNOON_START + "–" + AFTERNOON_END;
+    EVENING_START + "–" + EVENING_END;
+  const BREAK_START = MORNING_END;
+  const BREAK_END = EVENING_START;
   const CLINIC_HOURS_LABEL =
     CLINIC_WINDOW_LABEL + " · " + SLOT_MINUTES + " min per patient";
   const ManagerUI = window.MCManager;
@@ -606,7 +608,6 @@
     sessions: [],
     sessionQueues: {},
     sessionWeeks: [],
-    searchPeriod: "",
     sessionQueuePoll: null,
     directory: {
       items: [],
@@ -688,9 +689,20 @@
     timeStyle: "short",
     timeZone: TZ,
   });
+  const clinicClockFormatter = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: TZ,
+  });
 
   function todayISO() {
     return isoDayFormatter.format(new Date());
+  }
+
+  function isClinicBreakNow() {
+    const clock = clinicClockFormatter.format(new Date());
+    return clock >= BREAK_START && clock < BREAK_END;
   }
 
   function formatDate(value) {
@@ -740,6 +752,11 @@
       (window) => window.start === String(start).slice(0, 5)
     );
     return match ? match.end : "";
+  }
+
+  function sessionPeriodValue(session) {
+    const window = sessionWindow(session);
+    return window ? (window.label === "Morning" ? "MORNING" : "EVENING") : "";
   }
 
   function formatTime(value) {
@@ -2244,11 +2261,12 @@
   // Booking intent (login gate with return)
   // ---------------------------------------------------------------
 
-  function saveIntent(session, reason) {
+  function saveIntent(session, reason, period) {
     const intent = {
       sessionId: session && session.sessionId,
       session: session || null,
       reason: reason || "",
+      period: period || "",
     };
 
     state.pendingIntent = intent;
@@ -2290,7 +2308,10 @@
       intent.session;
 
     if (session) {
-      selectSession(session, { reason: intent.reason });
+      selectSession(session, {
+        reason: intent.reason,
+        period: intent.period,
+      });
     }
 
     clearIntent();
@@ -2353,14 +2374,12 @@
     const q = $("index-q");
     const specialisation = $("index-sp");
     const date = $("index-dt");
-    const period = $("index-period");
     const type = $("index-ty");
 
     return {
       q: q ? q.value.trim() : "",
       specialisationId: specialisation ? specialisation.value : "",
       date: date ? date.value : "",
-      period: period ? period.value : "",
       consultationType: type ? type.value : "",
     };
   }
@@ -2383,7 +2402,6 @@
     const list = document.querySelector("[data-session-list]");
     const heading = document.querySelector("[data-session-heading]");
     const filters = currentFilters();
-    const period = periodLabel(filters.period);
     const rangeSelect = $("index-range");
     const range = sessionSearchRange(filters.date, rangeSelect ? rangeSelect.value : "1");
     const requestFilters = {
@@ -2392,7 +2410,6 @@
       from: range.from,
       to: range.to,
     };
-    state.searchPeriod = filters.period;
     state.sessionWeeks = sessionWeekChunks(range.from, range.weeks);
 
     state.sessionsLoading = true;
@@ -2423,7 +2440,7 @@
             // bounded so a past or empty week never renders thousands of cards.
             sessions = allUpcoming.slice(0, 120);
             state.sessionWeeks = [];
-            fallbackNotice = `No sessions for ${formatDate(range.from)} – ${formatDate(range.to)}${period ? " in " + period : ""}. Showing the next available sessions:`;
+            fallbackNotice = `No sessions for ${formatDate(range.from)} – ${formatDate(range.to)}. Showing the next available sessions:`;
           }
         } catch {
           // keep original empty sessions
@@ -3519,17 +3536,20 @@
     );
     const deadline = bookingDeadline(session);
     const closed = bookingClosed(session);
+    const breakNow = isClinicBreakNow();
     const full = liveRemaining <= 0;
 
     footer.append(
       el(
         "span",
         "text-xs text-mute",
-        full
-          ? "Session full"
-          : closed
-            ? "Booking closed for this session"
-            : "Booking closes " +
+        breakNow
+          ? "Number issuing paused · 11:00–13:00 break"
+          : full
+            ? "Session full"
+            : closed
+              ? "Booking closed for this session"
+              : "Booking closes " +
               (deadline
                 ? deadline.toLocaleTimeString("en-GB", {
                     hour: "2-digit",
@@ -3547,11 +3567,11 @@
     const book = el(
       "button",
       "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-peach border-peach text-white hover:bg-peach-d min-h-10 px-3.5 py-2",
-      !available ? "Not available" : full ? "No spots left" : closed ? "Booking closed" : "Book"
+      !available ? "Not available" : full ? "No spots left" : closed ? "Booking closed" : breakNow ? "Break · no numbers" : "Book"
     );
     book.type = "button";
     book.dataset.bookSession = session.sessionId;
-    book.disabled = !available || full || closed;
+    book.disabled = !available || full || closed || breakNow;
     footer.append(book);
 
     card.append(header, meta, capacityWrap, footer);
@@ -3581,6 +3601,9 @@
 
     const reason = $("index-rs");
     if (reason) reason.value = "";
+
+    const period = $("index-bp");
+    if (period) period.value = "";
 
     const note = document.querySelector("[data-booking-note]");
     if (note) {
@@ -3630,11 +3653,11 @@
     const success = document.querySelector("[data-booking-success]");
     const note = document.querySelector("[data-booking-note]");
     const reason = $("index-rs");
+    const periodSelect = $("index-bp");
     const error = document.querySelector("[data-booking-error]");
 
     if (title) title.textContent = "Book: " + doctorName(session);
     if (meta) {
-      const requested = periodLabel(state.searchPeriod);
       const closeMinutes = session.consultationType === "PHYSICAL"
         ? PHYSICAL_BOOKING_CLOSE_MINUTES
         : ONLINE_BOOKING_CLOSE_MINUTES;
@@ -3642,7 +3665,6 @@
         formatDate(session.sessionDate),
         sessionWindowLabel(session),
         "Book by " + closeMinutes + " min before start",
-        requested ? "Requested " + requested : "",
         session.consultationType === "ONLINE" ? "Online" : "Physical",
         session.roomNumber ? "Room " + session.roomNumber : "Chat room",
         money(session.feeLkr),
@@ -3656,9 +3678,11 @@
       error.textContent = "";
     }
 
+    const breakNow = isClinicBreakNow();
     if (note) {
-      note.textContent =
-        S && S.role === "CUSTOMER"
+      note.textContent = breakNow
+        ? "Number issuing is paused during the 11:00–13:00 break. Please return outside the break."
+        : S && S.role === "CUSTOMER"
           ? "Your queue number is allocated as soon as you confirm."
           : S
             ? "Only patient accounts can book appointments."
@@ -3666,10 +3690,13 @@
     }
 
     if (reason && settings.reason) reason.value = settings.reason;
+    if (periodSelect) {
+      periodSelect.value = settings.period || sessionPeriodValue(session);
+    }
 
     const confirm = document.querySelector("[data-booking-confirm]");
     if (confirm) {
-      confirm.disabled = Boolean(S && S.role !== "CUSTOMER");
+      confirm.disabled = breakNow || Boolean(S && S.role !== "CUSTOMER");
     }
 
     const panel = document.querySelector('[aria-label="Book session"]');
@@ -3684,11 +3711,13 @@
     const session = state.selectedSession;
     const error = document.querySelector("[data-booking-error]");
     const reasonInput = $("index-rs");
+    const periodInput = $("index-bp");
     const button = document.querySelector("[data-booking-confirm]");
 
     if (!session) return;
 
     const reason = reasonInput ? reasonInput.value.trim() : "";
+    const period = periodInput ? periodInput.value : "";
 
     if (reason.length < 5) {
       if (error) {
@@ -3707,8 +3736,35 @@
       return;
     }
 
+    if (!period) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "Please choose Morning or Evening for this booking.";
+      }
+      return;
+    }
+
+    if (period !== sessionPeriodValue(session)) {
+      if (error) {
+        error.hidden = false;
+        error.textContent =
+          "The selected period does not match this session. " +
+          periodLabel(session.startTime) + " is the available period.";
+      }
+      return;
+    }
+
+    if (isClinicBreakNow()) {
+      if (error) {
+        error.hidden = false;
+        error.textContent =
+          "No appointment numbers are issued during the 11:00–13:00 break.";
+      }
+      return;
+    }
+
     if (!S) {
-      saveIntent(session, reason);
+      saveIntent(session, reason, period);
       nav("login");
       return;
     }
@@ -3762,7 +3818,8 @@
     try {
       const appointment = await MC.bookAppointment(
         session.sessionId,
-        reason
+        reason,
+        period
       );
 
       state.booking = appointment;

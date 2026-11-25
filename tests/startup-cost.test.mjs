@@ -52,12 +52,12 @@ test("a copied URL cannot restore a session from another browser context", () =>
   );
 });
 
-test("date formatters are reused instead of rebuilt per notice", () => {
+test("date and clinic clock formatters are reused instead of rebuilt per notice", () => {
   const formatters = APP.match(/new Intl\.DateTimeFormat/g) || [];
   assert.equal(
     formatters.length,
-    4,
-    "expected exactly four shared Intl.DateTimeFormat instances"
+    5,
+    "expected exactly five shared Intl.DateTimeFormat instances"
   );
   assert.match(APP, /const noticeDateFormatter = new Intl\.DateTimeFormat/);
 });

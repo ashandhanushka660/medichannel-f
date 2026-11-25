@@ -488,10 +488,10 @@
       return request("appointments/" + encodeURIComponent(appointmentId));
     },
 
-    bookAppointment(sessionId, reason) {
+    bookAppointment(sessionId, reason, period) {
       return request("appointments", {
         method: "POST",
-        body: { sessionId, reason },
+        body: { sessionId, reason, period },
       });
     },
 

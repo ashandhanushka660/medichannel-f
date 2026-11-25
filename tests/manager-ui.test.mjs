@@ -28,11 +28,11 @@ const UI = loadManagerUI();
 test("the manager session form covers the two published windows", () => {
   assert.match(
     HTML_SOURCE,
-    /<select id="sess-start"[^>]*><option value="07:00">Morning · 07:00 – 09:30<\/option><option value="12:00">Afternoon · 12:00 – 14:30<\/option><\/select>/
+    /<select id="sess-start"[^>]*><option value="07:00">Morning · 07:00 – 11:00<\/option><option value="13:00">Evening · 13:00 – 15:00<\/option><\/select>/
   );
   assert.match(
     HTML_SOURCE,
-    /<input id="sess-end" type="time" value="09:30" readonly[^>]*>/
+    /<input id="sess-end" type="time" value="11:00" readonly[^>]*>/
   );
   assert.match(
     HTML_SOURCE,

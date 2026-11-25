@@ -42,10 +42,28 @@ function canCancel(appointment: Appointment) {
   return !Number.isNaN(start.getTime()) && Date.now() < start.getTime() - 3 * 60 * 60 * 1000;
 }
 
+function periodForStart(startTime: string) {
+  const start = String(startTime || "").slice(0, 5);
+  if (start === "07:00") return "MORNING";
+  if (start === "13:00") return "EVENING";
+  return "";
+}
+
+function isClinicBreakNow() {
+  const clock = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Colombo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+  return clock >= "11:00" && clock < "13:00";
+}
+
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState("");
+  const [period, setPeriod] = useState("");
   const [reason, setReason] = useState("");
   const [today, setToday] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,14 +140,33 @@ export default function AppointmentsPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+    const selectedSession = sessions.find((item) => item.sessionId === sessionId);
+
+    if (!period) {
+      setError("Please choose Morning or Evening for this booking.");
+      setSaving(false);
+      return;
+    }
+    if (period !== periodForStart(selectedSession?.startTime || "")) {
+      setError("The selected period does not match this session.");
+      setSaving(false);
+      return;
+    }
+    if (isClinicBreakNow()) {
+      setError("No appointment numbers are issued during the 11:00–13:00 break.");
+      setSaving(false);
+      return;
+    }
+
     setSaving(true);
     try {
       const created = await apiRequest<Appointment>("appointments", {
         method: "POST",
-        body: JSON.stringify({ sessionId, reason }),
+        body: JSON.stringify({ sessionId, reason, period }),
       });
       setMessage(`Appointment booked: ${created.bookingReference}`);
       setReason("");
+      setPeriod("");
       setSessionId("");
       await loadData();
     } catch (cause) {
@@ -191,7 +228,15 @@ export default function AppointmentsPage() {
             <select
               className="field"
               value={sessionId}
-              onChange={(event) => setSessionId(event.target.value)}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setSessionId(nextId);
+                setPeriod(
+                  periodForStart(
+                    sessions.find((item) => item.sessionId === nextId)?.startTime || ""
+                  )
+                );
+              }}
               required
               disabled={availableSessions.length === 0}
             >
@@ -204,6 +249,19 @@ export default function AppointmentsPage() {
             </select>
           </label>
           <label className="text-sm font-medium">
+            Time period
+            <select
+              className="field"
+              value={period}
+              onChange={(event) => setPeriod(event.target.value)}
+              required
+            >
+              <option value="">Choose a period</option>
+              <option value="MORNING">Morning · 07:00 – 11:00</option>
+              <option value="EVENING">Evening · 13:00 – 15:00</option>
+            </select>
+          </label>
+          <label className="text-sm font-medium">
             Reason for visit
             <textarea
               className="field min-h-24"
@@ -213,7 +271,7 @@ export default function AppointmentsPage() {
               required
             />
           </label>
-          <button className="primary-button sm:w-fit" disabled={saving || !sessionId}>
+          <button className="primary-button sm:w-fit" disabled={saving || !sessionId || !period || isClinicBreakNow()}>
             {saving ? "Booking..." : "Book appointment"}
           </button>
         </form>

@@ -126,7 +126,7 @@ return { renderDoctorDirectory, filteredDirectoryItems };`
     state,
     8,
     5,
-    "07:00–09:30 or 12:00–14:30 · 5 min per patient"
+    "07:00–11:00 or 13:00–15:00 · 5 min per patient"
   );
 
   return { list, render: render.renderDoctorDirectory, state, status, text };
@@ -149,7 +149,7 @@ const liveDoctor = {
   sessionId: "session-1",
   sessionDate: "2026-11-23",
   startTime: "07:00:00",
-  endTime: "09:30:00",
+  endTime: "11:00:00",
   consultationType: "PHYSICAL",
   sessionStatus: "IN_PROGRESS",
   nowServing: 3,
@@ -195,7 +195,7 @@ test("guest cards show availability, room, fee, hours, attendance and live queue
     "Cardiology",
     "Room A-12",
     "LKR 2,500",
-    "07:00–09:30 or 12:00–14:30",
+    "07:00–11:00 or 13:00–15:00",
     "5 min per patient",
     "Physical · in consultation",
     "Now serving",
@@ -276,5 +276,5 @@ test("unavailable doctors stay visible with no live session", () => {
   assert.ok(cardText.includes("Unavailable"));
   assert.ok(cardText.includes("Allocated per session"));
   assert.ok(cardText.includes("Not attending right now"));
-  assert.ok(cardText.includes("07:00–09:30 or 12:00–14:30"));
+  assert.ok(cardText.includes("07:00–11:00 or 13:00–15:00"));
 });

@@ -63,10 +63,10 @@ function text(value) {
 }
 
 const CLINIC_WINDOWS = [
-  { start: "07:00", end: "09:30", label: "Morning" },
-  { start: "12:00", end: "14:30", label: "Afternoon" },
+  { start: "07:00", end: "11:00", label: "Morning" },
+  { start: "13:00", end: "15:00", label: "Evening" },
 ];
-const CLINIC_WINDOW_LABEL = "07:00–09:30 or 12:00–14:30";
+const CLINIC_WINDOW_LABEL = "07:00–11:00 or 13:00–15:00";
 const SLOT_MINUTES = 5;
 const MAX_PATIENTS_PER_SESSION = 30;
 const MAX_PATIENTS_PER_DAY = 60;
@@ -96,6 +96,7 @@ function makeSessionHarness(session, queue) {
     "money",
     "bookingDeadline",
     "bookingClosed",
+    "isClinicBreakNow",
     "animateStateChange",
     "state",
     "CLINIC_WINDOWS",
@@ -118,6 +119,7 @@ return renderSessionCard;`
     (value) => "LKR " + value,
     () => null,
     () => false,
+    () => false,
     () => {},
     state,
     CLINIC_WINDOWS,
@@ -139,7 +141,7 @@ const session = {
   roomNumber: "A-12",
   sessionDate: "2026-11-24",
   startTime: "07:00:00",
-  endTime: "09:30:00",
+  endTime: "11:00:00",
   consultationType: "PHYSICAL",
   status: "OPEN",
   minutesPerPatient: 5,
@@ -188,7 +190,7 @@ test("session cards show congruent clinic hours and the live queue", () => {
 
   for (const expected of [
     "Dr. Rajini Kanth",
-    "Morning 07:00–09:30 · 5 min per patient",
+    "Morning 07:00–11:00 · 5 min per patient",
     "Up to 6 patients · 60 per day across both sessions",
     "Now serving #3",
     "Next #4",
@@ -208,13 +210,17 @@ test("the booking confirmation keeps showing the allocated queue number", () => 
   );
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261125b"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261125c"/
   );
 });
 
-test("the booking form offers the two published session periods", () => {
-  const select = HTML_SOURCE.match(/<select id="index-period"[^>]*>([\s\S]*?)<\/select>/);
-  assert.ok(select, "the time period select was not found");
+test("the time period choice lives in the booking panel, not the filter area", () => {
+  assert.equal(HTML_SOURCE.includes('id="index-period"'), false);
+
+  const formStart = HTML_SOURCE.indexOf('<div data-booking-form');
+  const select = HTML_SOURCE.match(/<select id="index-bp"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(select, "the booking period select was not found");
+  assert.ok(formStart >= 0 && HTML_SOURCE.indexOf('<select id="index-bp"') > formStart);
 
   const options = [...select[1].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(
     (match) => ({ value: match[1], label: match[2] })
@@ -222,20 +228,20 @@ test("the booking form offers the two published session periods", () => {
 
   assert.deepEqual(
     options.map((option) => option.value),
-    ["", "07:00", "12:00"]
+    ["", "MORNING", "EVENING"]
   );
-  assert.equal(options[0].label, "All periods");
-  assert.equal(options[1].label, "Morning · 07:00 – 09:30");
-  assert.equal(options[2].label, "Afternoon · 12:00 – 14:30");
-  assert.match(HTML_SOURCE, /<label for="index-period">Session period<\/label>/);
+  assert.equal(options[0].label, "Choose a period");
+  assert.equal(options[1].label, "Morning · 07:00 – 11:00");
+  assert.equal(options[2].label, "Evening · 13:00 – 15:00");
+  assert.match(HTML_SOURCE, /<label for="index-bp"[^>]*>Time period \*<\/label>/);
+  assert.match(APP_SOURCE, /Please choose Morning or Evening for this booking\./);
 });
 
-test("the selected window is sent to the session search and labelled", () => {
+test("session filters no longer carry a period but bookings do", () => {
   const values = {
     "index-q": "Wijesinghe",
     "index-sp": "cardiology-id",
     "index-dt": "2026-11-24",
-    "index-period": "07:00",
     "index-ty": "ONLINE",
   };
   const $ = (id) => ({ value: values[id] || "" });
@@ -249,7 +255,6 @@ test("the selected window is sent to the session search and labelled", () => {
     q: "Wijesinghe",
     specialisationId: "cardiology-id",
     date: "2026-11-24",
-    period: "07:00",
     consultationType: "ONLINE",
   });
 
@@ -257,12 +262,21 @@ test("the selected window is sent to the session search and labelled", () => {
     "CLINIC_WINDOWS",
     `${functionSource("periodLabel")}\nreturn periodLabel;`
   )(CLINIC_WINDOWS);
-  assert.equal(periodLabel("07:00"), "Morning 07:00–09:30");
-  assert.equal(periodLabel("12:00"), "Afternoon 12:00–14:30");
+  assert.equal(periodLabel("07:00"), "Morning 07:00–11:00");
+  assert.equal(periodLabel("13:00"), "Evening 13:00–15:00");
   assert.equal(periodLabel(""), "");
 
   assert.match(APP_SOURCE, /MC\.sessions\(requestFilters\)/);
   assert.match(API_SOURCE, /sessions\(filters\) \{\s*return request\("sessions" \+ query\(filters\)\);/);
   assert.match(APP_SOURCE, /rangeLabel \+\n\s*" · " \+ CLINIC_WINDOW_LABEL/);
   assert.match(APP_SOURCE, /const CLINIC_WINDOW_LABEL =\n\s*MORNING_START \+ "–" \+ MORNING_END/);
+  assert.match(APP_SOURCE, /const period = periodInput \? periodInput\.value : ""/);
+  assert.match(
+    APP_SOURCE,
+    /MC\.bookAppointment\(\s*session\.sessionId,\s*reason,\s*period\s*\)/
+  );
+  assert.match(API_SOURCE, /bookAppointment\(sessionId, reason, period\) \{/);
+  assert.match(API_SOURCE, /body: \{ sessionId, reason, period \}/);
+  assert.match(APP_SOURCE, /The selected period does not match this session\./);
+  assert.match(APP_SOURCE, /isClinicBreakNow\(\)/);
 });
