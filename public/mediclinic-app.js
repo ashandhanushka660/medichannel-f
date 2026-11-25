@@ -2809,25 +2809,38 @@
     const sessions = Array.isArray(state.sessions) ? state.sessions : [];
     if (!sessions.length) return;
 
-    const relevant = sessions.filter(
-      (session) => session && session.sessionId && session.status !== "CANCELLED"
-    );
-    if (!relevant.length) return;
+    // The public directory already carries the live queue summary for each
+    // doctor's active session. Calling the protected per-session queue
+    // endpoint here would send one 401 request per card every 15 seconds
+    // and overload the backend for every guest visitor.
+    if (!Array.isArray(state.directory.items) || state.directory.items.length === 0) {
+      await loadDoctorDirectory({ silent: true });
+    }
 
-    const results = await Promise.allSettled(
-      relevant.map((session) => MC.sessionQueue(session.sessionId))
-    );
+    const summaries = new Map();
+    (state.directory.items || []).forEach((doctor) => {
+      if (!doctor || !doctor.sessionId) return;
+      const summary = {
+        nowServing: doctor.nowServing,
+        nextNumber: doctor.nextNumber,
+        remainingAppointments: doctor.remainingAppointments,
+        maxAppointments: doctor.maxAppointments,
+        status: doctor.sessionStatus,
+      };
+      summaries.set(doctor.sessionId, summary);
+    });
 
     let changed = false;
-    results.forEach((result, index) => {
-      if (result.status !== "fulfilled" || !result.value) return;
-      const session = relevant[index];
-      state.sessionQueues[session.sessionId] = result.value;
-      if (result.value.remainingAppointments != null) {
-        session.remainingAppointments = result.value.remainingAppointments;
+    sessions.forEach((session) => {
+      if (!session || !session.sessionId) return;
+      const summary = summaries.get(session.sessionId);
+      if (!summary) return;
+      state.sessionQueues[session.sessionId] = summary;
+      if (summary.remainingAppointments != null) {
+        session.remainingAppointments = summary.remainingAppointments;
       }
-      if (result.value.status) {
-        session.status = result.value.status;
+      if (summary.status) {
+        session.status = summary.status;
       }
       changed = true;
     });
@@ -3387,7 +3400,9 @@
     stopDirectoryPolling();
     void loadDoctorDirectory();
     state.directory.poll = setInterval(() => {
-      if (activeView === "doctors") void loadDoctorDirectory({ silent: true });
+      if (activeView === "doctors" || activeView === "index") {
+        void loadDoctorDirectory({ silent: true });
+      }
     }, 15000);
   }
 
@@ -8199,13 +8214,25 @@
         return;
       }
 
-      // Fetch queue details in parallel
-      const queuePromises = sessions.map((s) =>
-        MC.sessionQueue(s.sessionId).catch(() => null)
-      );
-      const queueResults = await Promise.all(queuePromises);
-      sessions.forEach((s, idx) => {
-        s.queue = queueResults[idx];
+      // Queue summaries come from the single public directory request. The
+      // previous per-session protected calls produced one 401 per row and
+      // overwhelmed the backend on every manager page load.
+      if (!Array.isArray(state.directory.items) || state.directory.items.length === 0) {
+        await loadDoctorDirectory({ silent: true });
+      }
+      const queuesBySession = new Map();
+      (state.directory.items || []).forEach((doctor) => {
+        if (!doctor || !doctor.sessionId) return;
+        const summary = {
+          nowServing: doctor.nowServing,
+          nextNumber: doctor.nextNumber,
+          remainingAppointments: doctor.remainingAppointments,
+          maxAppointments: doctor.maxAppointments,
+        };
+        queuesBySession.set(doctor.sessionId, summary);
+      });
+      sessions.forEach((s) => {
+        s.queue = queuesBySession.get(s.sessionId) || null;
       });
 
       // Calculate Manager Dashboard Stats

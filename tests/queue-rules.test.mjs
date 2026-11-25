@@ -60,3 +60,26 @@ test("create-session form publishes the full clinic day and 5-30 minute slots", 
   assert.match(APP, /const SLOT_MINUTES = 5/);
   assert.match(APP, /" · " \+ CLINIC_WINDOW_LABEL/);
 });
+
+test("live queue summaries come from one public directory request", () => {
+  assert.match(
+    APP,
+    /async function refreshSessionQueues\(\)[\s\S]{0,900}state\.directory\.items/
+  );
+  assert.match(APP, /const queuesBySession = new Map\(\)/);
+  assert.match(
+    APP,
+    /if \(activeView === "doctors" \|\| activeView === "index"\)/
+  );
+
+  // The old pattern issued one protected queue request per rendered session,
+  // producing a 401 storm from guest and manager pages.
+  assert.doesNotMatch(
+    APP,
+    /relevant\.map\(\(session\) => MC\.sessionQueue\(session\.sessionId\)\)/
+  );
+  assert.doesNotMatch(
+    APP,
+    /const queuePromises = sessions\.map\(\(s\) =>\s*MC\.sessionQueue/
+  );
+});
