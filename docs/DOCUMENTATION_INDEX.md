@@ -4,8 +4,8 @@ This index maps the brief's deliverables to the submitted files. All PDFs are va
 
 | Brief deliverable | Submitted file | Notes |
 |---|---|---|
-| Group report PDF, 4,000–6,000 words | `IT404050_ASSIGNMENT_2_FINAL_REPORT.pdf` | 5,103 source words; 21 A4 pages; generated from `IT404050_ASSIGNMENT_2_FINAL_REPORT_SOURCE.md` |
-| Editable group report | `IT404050_ASSIGNMENT_2_FINAL_REPORT.docx` | Same content as the PDF, with embedded evidence screenshots |
+| Group report PDF, 4,000–6,000 words | `IT404050_ASSIGNMENT_2_FINAL_REPORT.pdf` | 5,103 source words; 16 designed A4 pages; exported from the DOCX so both match visually |
+| Editable group report | `IT404050_ASSIGNMENT_2_FINAL_REPORT.docx` | Designed cover, contents, branded headers/footers, styled tables, evidence callouts and 4 embedded images |
 | Report source | `IT404050_ASSIGNMENT_2_FINAL_REPORT_SOURCE.md` | Single source of truth for DOCX and PDF generation |
 | Architecture diagram | Section 4 of the final report | High-level browser/BFF/API/WS/database flow |
 | ERD and database design | `../../be/docs/DATABASE_ERD.md`, `../../be/docs/schema.sql` | Mermaid ERD, constraints, indexes and encryption notes |
@@ -20,5 +20,5 @@ This index maps the brief's deliverables to the submitted files. All PDFs are va
 | Reflection | Section 16 of the final report | Design decisions, challenges and lessons |
 | Member contributions | `PEER_ASSESSMENT.md` and Section 2 of the final report | Declared contributions; confidential form submitted separately via LMS |
 | AI disclosure | Section 17 of the final report | OpenCode used for documentation, verification scripts and log analysis |
-| Presentation slides | `PRESENTATION_SLIDES.md`, `PRESENTATION_SLIDES.pptx`, `PRESENTATION_SLIDES.pdf` | 10 slides in PowerPoint format and PDF |
+| Presentation slides | `PRESENTATION_SLIDES.md`, `PRESENTATION_SLIDES.pptx`, `PRESENTATION_SLIDES.pdf` | 10 designed 16:9 PowerPoint slides with speaker notes; matching PDF |
 | Backup demo recording | Link in report and slides | 8–10 minute recording supplied through Google Drive |
