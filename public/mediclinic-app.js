@@ -1751,54 +1751,58 @@
   }
 
   let welcomeEntrancePlayed = false;
-  let statsAnimationPlayed = false;
+  let welcomeStatsRequested = false;
 
-  function playStatsCounter() {
-    if (statsAnimationPlayed) return;
-    statsAnimationPlayed = true;
+  // The welcome counters are live figures, never marketing constants. They
+  // stay as "—" if the directory cannot be reached rather than inventing a
+  // number that the hospital cannot back up.
+  function clinicWeekBoundsISO() {
+    const [year, month, day] = todayISO().split("-").map(Number);
+    const today = new Date(Date.UTC(year, month - 1, day));
+    const daysSinceMonday = (today.getUTCDay() + 6) % 7;
+    const monday = new Date(today);
+    monday.setUTCDate(today.getUTCDate() - daysSinceMonday);
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    const iso = (date) => date.toISOString().slice(0, 10);
+    return { from: iso(monday), to: iso(sunday) };
+  }
 
-    const welcome = document.querySelector('[data-view="welcome"]');
-    const stats = welcome && welcome.querySelector("main .grid-cols-3");
-    if (!stats) return;
+  function setWelcomeStat(name, value) {
+    const element = document.querySelector(
+      '[data-welcome-stat="' + name + '"]'
+    );
+    if (!element || !Number.isFinite(value) || value < 0) return;
+    element.textContent = String(value);
+    element.title = "Live count from the hospital directory";
+  }
 
-    const valueEls = Array.from(stats.querySelectorAll(".text-2xl"));
-    if (valueEls.length !== 3) return;
+  async function loadWelcomeStats() {
+    if (welcomeStatsRequested) return;
+    welcomeStatsRequested = true;
 
-    if (prefersReducedMotion.matches) {
-      valueEls[0].textContent = "40+";
-      valueEls[1].textContent = "15";
-      valueEls[2].textContent = "120+";
-      return;
+    const bounds = clinicWeekBoundsISO();
+    const [doctors, specialisations, sessions] = await Promise.allSettled([
+      MC.doctorDirectory(),
+      MC.specialisations(),
+      MC.sessions({ from: bounds.from, to: bounds.to }),
+    ]);
+
+    if (doctors.status === "fulfilled" && Array.isArray(doctors.value)) {
+      setWelcomeStat("doctors", doctors.value.length);
     }
-
-    const items = [
-      { target: 40, suffix: "+" },
-      { target: 15, suffix: "" },
-      { target: 120, suffix: "+" },
-    ];
-
-    const duration = 500;
-    const startTime = performance.now();
-
-    function step(now) {
-      const elapsed = Math.min(now - startTime, duration);
-      const progress = 1 - Math.pow(1 - elapsed / duration, 3);
-
-      items.forEach((item, index) => {
-        const val = Math.round(item.target * progress);
-        valueEls[index].textContent = `${val}${item.suffix}`;
-      });
-
-      if (elapsed < duration) {
-        requestAnimationFrame(step);
-      } else {
-        valueEls[0].textContent = "40+";
-        valueEls[1].textContent = "15";
-        valueEls[2].textContent = "120+";
-      }
+    if (
+      specialisations.status === "fulfilled" &&
+      Array.isArray(specialisations.value)
+    ) {
+      setWelcomeStat("specialisations", specialisations.value.length);
     }
-
-    requestAnimationFrame(step);
+    if (sessions.status === "fulfilled" && Array.isArray(sessions.value)) {
+      setWelcomeStat(
+        "sessions",
+        sessions.value.filter((session) => session.status !== "CANCELLED").length
+      );
+    }
   }
 
   function playWelcomeEntrance() {
@@ -1874,8 +1878,8 @@
       animateEntry(element, index * 55, 420);
     });
 
-    // 3. Statistics moment (count-up from 0)
-    setTimeout(playStatsCounter, 450);
+    // 3. Live statistics from the public directory
+    void loadWelcomeStats();
   }
 
   function showView(id, panel, options) {

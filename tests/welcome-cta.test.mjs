@@ -90,6 +90,26 @@ test("the rendered account view updates the welcome CTA", () => {
   assert.match(APP_SOURCE, /renderWelcomeCta\(\);[\s\S]{0,240}data-roles/);
   assert.match(
     HTML_SOURCE,
-    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261125f"/
+    /<link rel="stylesheet" href="\/vendor\/mediclinic-tailwind\.css\?v=20261126a"/
   );
+});
+
+test("welcome counters are bound to live directory data", () => {
+  for (const name of ["doctors", "specialisations", "sessions"]) {
+    assert.match(
+      HTML_SOURCE,
+      new RegExp(`data-welcome-stat="${name}"`)
+    );
+  }
+
+  // The old marketing constants must never be rendered as live figures.
+  assert.doesNotMatch(HTML_SOURCE, />40\+</);
+  assert.doesNotMatch(HTML_SOURCE, />120\+</);
+
+  assert.match(APP_SOURCE, /function loadWelcomeStats\(\)/);
+  assert.match(APP_SOURCE, /MC\.doctorDirectory\(\)/);
+  assert.match(APP_SOURCE, /MC\.specialisations\(\)/);
+  assert.match(APP_SOURCE, /MC\.sessions\(\{\s*from:/);
+  assert.match(APP_SOURCE, /void loadWelcomeStats\(\)/);
+  assert.doesNotMatch(APP_SOURCE, /playStatsCounter/);
 });
