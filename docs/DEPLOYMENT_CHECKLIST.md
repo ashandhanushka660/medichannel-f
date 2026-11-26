@@ -5,26 +5,27 @@
 | Component | Repository | Host |
 | --- | --- | --- |
 | Next.js frontend | `medichannel-frontend` | Vercel (Netlify alternative) |
-| Spring Boot API | `medichannel-backend` | Render (Docker) |
-| PostgreSQL | Neon project | Neon |
+| Spring Boot API | `medichannel-backend` | Heroku app `evening-plains-20028` |
+| PostgreSQL | Supabase project | Supabase |
 
-Both repositories deploy from their `main` branch.
+Both repositories deploy from their `main` branch. Legacy Render/Neon notes below are historical alternatives and are superseded by the current production stack.
 
-## Render (backend)
+## Heroku (backend, current production)
 
-- Service: `medichannel-backend` (Singapore, Docker from the backend `render.yaml`)
-- Branch: `main` (auto-deploy on commit)
+- App: `evening-plains-20028`
+- API: `https://evening-plains-20028-0ce7ee55df0f.herokuapp.com/`
 - Health check: `/actuator/health` → `{"status":"UP"}`
-- Build: `./mvnw -DskipTests package` via the backend `Dockerfile`
+- Current release: `v58`; backend source commit `a555f11`
+- Build: Maven via the backend `Procfile` and `system.properties` (Java 21)
 - Required env vars (names only):
-  - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (Neon; `DB_URL` must be JDBC and include `sslmode=require`)
+  - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (Supabase Session pooler; `DB_URL` must be JDBC and include `sslmode=require`)
   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` (independent Base64-encoded 32+ byte keys)
-  - `APP_FRONTEND_ORIGIN` (comma-separated explicit origins; production frontend origins are always allowed)
-  - `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD` (first-admin bootstrap; 8+ characters with a letter, a number and a symbol)
-  - `APP_DEMO_SEED=false` in production (only enable in isolated staging with `APP_DEMO_PASSWORD=<STRONG_RANDOM_PASSWORD>`)
-  - `PORT=8080` (Render also injects `PORT`)
-- WebSocket: `/ws` (STOMP), allowed origins from `APP_FRONTEND_ORIGIN` plus the production frontend origins
-- CORS: configured frontend origins only, plus the production frontend origins
+  - `APP_FRONTEND_ORIGIN` (exact Vercel production and preview origins; no wildcard)
+  - `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD` (first-admin bootstrap; values supplied only through Heroku config)
+  - `APP_DEMO_SEED=false` in production
+  - `APP_RESET_ALL_PASSWORDS` must remain unset
+- WebSocket: `/ws` (STOMP) with the same exact-origin allowlist as CORS
+- Do not push documentation-only backend commits to the Heroku git remote; that would trigger an unnecessary redeploy.
 
 ## Vercel (frontend, primary)
 
@@ -46,15 +47,15 @@ Both repositories deploy from their `main` branch.
 - Plugin: `@netlify/plugin-nextjs`
 - Node: 22 (set in `netlify.toml`)
 - Required env vars:
-  - `API_URL=https://medichannel-backend.onrender.com` (server-side only; no `NEXT_PUBLIC_` prefix)
+  - `API_URL=https://evening-plains-20028-0ce7ee55df0f.herokuapp.com` (server-side only; no `NEXT_PUBLIC_` prefix)
 - The CSP `connect-src` is derived from `API_URL` at build time, so set `API_URL` before the first deploy and rebuild after changing it.
 - WebSocket config route: `/api/realtime/config` returns the backend WS URL derived from `API_URL`.
 
 ## Supabase (database)
 
-- Flyway runs at startup; the current migration set is V1–V25.
+- Flyway runs at startup; the current live migration version is **29**.
 - Use the **Session pooler** (`aws-0-<region>.pooler.supabase.com:5432`, user `postgres.<project-ref>`) for both Flyway and the app. The direct `db.<ref>.supabase.co` host is IPv6-only and Heroku cannot reach it.
-- Restore the production dump (schema at V19) into a clean project, then let Flyway apply V20–V25 on first boot.
+- Restore the retained pre-V29 dump into a clean project, then let Flyway apply the remaining migrations on first boot.
 - Never point local tests or demo seeding at the production project.
 
 ## WebSocket configuration

@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>MediChannel — IT404050 Assignment 2 Final Report</title>
+<style>
+@page { size: A4; margin: 20mm 18mm 18mm 18mm; }
+body { font-family: "Liberation Sans", Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; color: #111827; }
+h1 { font-size: 22pt; color: #1f3a5f; margin: 0 0 10pt 0; text-align: center; }
+h2 { font-size: 15pt; color: #1f3a5f; border-bottom: 1px solid #9ca3af; padding-bottom: 4pt; margin-top: 18pt; }
+h3 { font-size: 12pt; color: #2b7a9e; margin-top: 12pt; }
+p { margin: 6pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 9pt; }
+th, td { border: 1px solid #9ca3af; padding: 5pt; vertical-align: top; }
+th { background: #e5e7eb; color: #111827; }
+pre { background: #f3f4f6; border: 1px solid #d1d5db; padding: 8pt; font-family: "Liberation Mono", monospace; font-size: 8.5pt; white-space: pre-wrap; }
+code { font-family: "Liberation Mono", monospace; font-size: 9pt; }
+img { max-width: 100%; border: 1px solid #d1d5db; margin: 6pt 0; }
+strong { color: #111827; }
+</style>
+</head>
+<body>
+<h1 id="medichannel-hospital-channelling-and-appointment-system">MediChannel — Hospital Channelling and Appointment System</h1>
+<h2 id="it404050-full-stack-development-group-assignment-2">IT404050 Full Stack Development — Group Assignment 2</h2>
+<p><strong>Group:</strong> MediChannel<br />
+<strong>Module:</strong> IT404050 — Full Stack Development<br />
+<strong>Assignment:</strong> Assignment 2 — MediChannel: Hospital Channelling and Appointment System<br />
+<strong>Brief issue date:</strong> 5 November 2026<br />
+<strong>Submission deadline:</strong> 5 December 2026<br />
+<strong>Report date:</strong> 26 November 2026  </p>
+<p><strong>Live frontend:</strong> <code>https://medichannel-f-p3z5.vercel.app/mediclinic-system.html#welcome</code><br />
+<strong>Live API:</strong> <code>https://evening-plains-20028-0ce7ee55df0f.herokuapp.com/</code><br />
+<strong>Frontend repository:</strong> <code>https://github.com/wcm24b126-hue/medichannel-frontend</code><br />
+<strong>Backend repository:</strong> <code>https://github.com/wcm24b126-hue/medichannel-backend</code><br />
+<strong>Backup demo recording:</strong> <code>https://drive.google.com/drive/u/1/folders/1D7_RV90haVzTvYngc10b0ECImY1iPta7?dmr=1&amp;ec=wgc-drive-%5Bmodule%5D-goto</code></p>
+<div style="page-break-after: always;"></div>
+
+<h2 id="1-introduction-and-client-problem">1. Introduction and client problem</h2>
+<p>Lanka Care Hospital in Colombo has 40 visiting doctors across 15 specialisations and runs more than 120 channelling sessions each week. Before MediChannel, appointments were taken by telephone and recorded in a paper register. This created several repeated problems: patients called multiple times, appointment numbers were sometimes issued twice, patients waited without knowing which number the doctor was seeing, online consultations used personal messaging applications, cancelled sessions required staff to telephone every affected patient, and patient details were kept in spreadsheets with inadequate protection.</p>
+<p>MediChannel replaces that manual process with a secure, real-time web system. Patients can search doctors and sessions, book physical or online appointments, receive a queue number, follow the live queue, join a private online consultation, read their consultation summary, give feedback and manage their profile. Doctors can see their own sessions and patient lists, start a session, call the next patient, record consultation outcomes, chat securely and publish summaries. Managers can administer specialisations, rooms, doctors and sessions, run reception, record payments, publish notices, moderate feedback and view reports. Administrators can create staff accounts, manage account status, reset staff passwords and review an immutable audit log.</p>
+<p>The system is built only with the required stack: Next.js for the frontend, Spring Boot for the REST API and WebSockets, and PostgreSQL for the database. It is deployed on free hosting: Vercel for the frontend, Heroku for the Spring Boot service and Supabase for PostgreSQL. HTTPS and WSS are used in production. All personal and medical data is encrypted at rest with AES-256-GCM, lookup fields use HMAC-SHA256, passwords are stored only as bcrypt hashes, and JWTs are delivered through an HTTP-only Secure cookie handled by Next.js route handlers.</p>
+<p>This report documents the complete design, implementation, security evidence, real-time design, deployment, testing and reflection. It is written from the submitted repository state and from live verification evidence captured on 26 November 2026. No real patient data, passwords, tokens, password hashes or environment variable values are included.</p>
+<h2 id="2-team-and-work-plan">2. Team and work plan</h2>
+<h3 id="21-group-members">2.1 Group members</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">#</th>
+<th>Name</th>
+<th>Student ID</th>
+<th>GitHub username</th>
+<th>Main responsibility</th>
+<th>Team leader</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td>P.A. Dhanushka</td>
+<td>WCM/24/B1/26</td>
+<td><code>wcm24b126-hue</code></td>
+<td>Team leader; database, authentication and roles, encryption, integration</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td>B. Vinojan</td>
+<td>WCM/24/B2/29</td>
+<td><code>LkMadMan</code></td>
+<td>WebSocket features, all role pages, feedback and notices</td>
+<td>No</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td>S. Kapilan</td>
+<td>SIS/24/B1/07</td>
+<td>—</td>
+<td>Database, authentication and roles, encryption</td>
+<td>No</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td>M.H.M. Fahim</td>
+<td>WCM/24/B2/12</td>
+<td><code>Fahim10001</code></td>
+<td>Database, authentication and roles, encryption</td>
+<td>No</td>
+</tr>
+<tr>
+<td style="text-align: right;">5</td>
+<td>H.M. Hasfak</td>
+<td>SIS/24/B2/19</td>
+<td><code>Hasfak7</code></td>
+<td>Caching, full deployment, live testing, report, slides and presentation rehearsal</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-planned-milestones">2.2 Planned milestones</h3>
+<table>
+<thead>
+<tr>
+<th>Week</th>
+<th>Milestone</th>
+<th>MediChannel activity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Team formation and design</td>
+<td>Formed the group, divided responsibilities, designed the ERD, API list and page wireframes, created the frontend and backend repositories and deployed empty projects.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Core backend and security</td>
+<td>Implemented PostgreSQL migrations, authentication, four roles, encryption converters, doctor and specialisation data, sessions and booking rules.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Features and pages</td>
+<td>Implemented WebSocket features, patient/doctor/manager/admin pages, feedback, notices and notification delivery.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Deployment and evidence</td>
+<td>Added caching, completed free hosting deployment, ran live testing, prepared the report, slides, test table, manuals and demo rehearsal.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-contribution-matrix">2.3 Contribution matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>P.A. Dhanushka</th>
+<th>B. Vinojan</th>
+<th>S. Kapilan</th>
+<th>M.H.M. Fahim</th>
+<th>H.M. Hasfak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Database schema and constraints</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Lead</td>
+<td>Lead</td>
+<td>Review</td>
+</tr>
+<tr>
+<td>Authentication, roles and ownership</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Lead</td>
+<td>Lead</td>
+<td>Review</td>
+</tr>
+<tr>
+<td>Encryption and security evidence</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Lead</td>
+<td>Lead</td>
+<td>Review</td>
+</tr>
+<tr>
+<td>WebSocket features</td>
+<td>Review</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Support</td>
+<td>Test</td>
+</tr>
+<tr>
+<td>Role pages and frontend integration</td>
+<td>Lead</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Support</td>
+<td>Test</td>
+</tr>
+<tr>
+<td>Feedback and notices</td>
+<td>Review</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Support</td>
+<td>Test</td>
+</tr>
+<tr>
+<td>Caching and performance</td>
+<td>Review</td>
+<td>Support</td>
+<td>—</td>
+<td>Support</td>
+<td>Lead</td>
+</tr>
+<tr>
+<td>Deployment and live testing</td>
+<td>Lead</td>
+<td>Support</td>
+<td>Support</td>
+<td>Support</td>
+<td>Lead</td>
+</tr>
+<tr>
+<td>Report, slides and rehearsal</td>
+<td>Review</td>
+<td>Support</td>
+<td>—</td>
+<td>Support</td>
+<td>Lead</td>
+</tr>
+</tbody>
+</table>
+<p>The group used feature branches and pull requests before merging into <code>main</code>. The frontend repository contains 100+ meaningful commits across multiple authors and the backend repository contains 60+ commits, with the most recent production frontend commit <code>00bfe0d</code> and backend commit <code>a555f11</code>. Secrets were never staged or committed.</p>
+<h2 id="3-requirements-coverage">3. Requirements coverage</h2>
+<p>The implementation covers every major area of the brief.</p>
+<table>
+<thead>
+<tr>
+<th>Brief area</th>
+<th>Implementation</th>
+<th>Evidence in this submission</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Next.js frontend</td>
+<td>App Router routes, same-origin BFF route handlers, secure cookies, role workspaces and responsive UI</td>
+<td><code>src/app/**</code>, <code>README.md</code>, screenshots in Section 15</td>
+</tr>
+<tr>
+<td>Spring Boot REST API</td>
+<td>Layered controllers, services, repositories, entities and DTOs; Bean Validation; global error handler; health endpoint</td>
+<td><code>API_REFERENCE.md</code>, <code>be/docs/**</code>, live <code>/actuator/health</code></td>
+</tr>
+<tr>
+<td>PostgreSQL</td>
+<td>Migrations, constraints, indexes, triggers, encrypted columns and fictional seed data</td>
+<td><code>DATABASE_ERD.md</code>, <code>schema.sql</code>, Flyway version 29 evidence</td>
+</tr>
+<tr>
+<td>Four roles</td>
+<td>CUSTOMER, DOCTOR, MANAGER and ADMIN with server-side authorization and ownership checks</td>
+<td>Section 7, live <code>403</code> evidence</td>
+</tr>
+<tr>
+<td>Booking rules</td>
+<td>BR-01 to BR-11 enforced in service layer and database constraints</td>
+<td>Section 9, <code>REQUIREMENTS_TRACEABILITY_MATRIX.md</code></td>
+</tr>
+<tr>
+<td>Real-time</td>
+<td>STOMP/WebSocket queue, availability, chat, typing and notifications</td>
+<td>Section 10, <code>API_REFERENCE.md</code></td>
+</tr>
+<tr>
+<td>Security</td>
+<td>HTTPS, WSS, AES-256-GCM, HMAC-SHA256, bcrypt, JWT, secure cookies, CORS and audit log</td>
+<td>Section 8, live ciphertext/decryption evidence</td>
+</tr>
+<tr>
+<td>Free hosting</td>
+<td>Vercel, Heroku and Supabase</td>
+<td>Section 13, <code>LIVE_VERIFICATION_REPORT.md</code></td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>Unit, integration, browser and live E2E tests; 30-case table</td>
+<td>Section 14, <code>TEST_CASES_30.md</code></td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td>Report, API reference, ERD, deployment guide, manuals, traceability matrix and slides</td>
+<td>This report and <code>fe/docs</code>, <code>be/docs</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-system-architecture">4. System architecture</h2>
+<p>The architecture separates the browser, frontend BFF, Spring Boot API, WebSocket layer and PostgreSQL database. The browser never receives the backend JWT. It receives only an HTTP-only Secure cookie created by the Next.js route handler. Server-side frontend routes proxy API calls to the backend and attach the bearer token.</p>
+<div style="font-family: monospace; font-size: 11pt; background: #f3f6f8; padding: 12px; border: 1px solid #b8c4cc;">
+Browser (React / static visual twin)<br>
+&nbsp;&nbsp;|&nbsp;&nbsp;HTTPS<br>
+v<br>
+Next.js App Router + BFF route handlers<br>
+&nbsp;&nbsp;|&nbsp;&nbsp;server-side API_URL, HttpOnly __Host- cookie<br>
+v<br>
+Spring Boot REST API (/api/v1) &nbsp;&nbsp;&nbsp;&nbsp; Spring WebSocket STOMP (/ws)<br>
+&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|<br>
+&nbsp;&nbsp;v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;v<br>
+PostgreSQL (Supabase) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; queue / chat / notification topics<br>
+</div>
+
+<p><strong>Figure 1 — High-level architecture.</strong></p>
+<p>The frontend has public, patient, doctor, manager and admin areas. The public area includes the welcome screen, doctor catalogue, session search and notices. The patient area includes booking, appointments, queue, consultation, summary and feedback. Staff areas are role-gated and protected again on the server. The backend exposes REST endpoints under <code>/api/v1</code> and a STOMP endpoint at <code>/ws</code>. PostgreSQL stores all persistent data, including encrypted personal and clinical fields, HMAC lookup hashes, notifications, feedback, notices and audit records.</p>
+<p>The production deployment uses Vercel for the Next.js application, Heroku for the Spring Boot service and Supabase for PostgreSQL. Flyway migrations run at backend startup. The current database is at Flyway version 29. CORS allows only the exact production and preview Vercel origins, and WebSocket handshake uses the same origin allowlist.</p>
+<h2 id="5-database-design-and-erd">5. Database design and ERD</h2>
+<p>The database uses PostgreSQL with UUID primary keys, foreign keys, unique constraints, check constraints and partial indexes. The canonical DDL is checked in as <code>be/docs/schema.sql</code>. The Mermaid ERD below is also maintained in <code>be/docs/DATABASE_ERD.md</code>.</p>
+<pre><code class="language-mermaid">erDiagram
+    roles ||--o{ users : assigns
+    users ||--o| patients : has_profile
+    users ||--o| doctors : has_profile
+    specialisations ||--o{ doctors : classifies
+    doctors ||--o{ doctor_sessions : runs
+    rooms ||--o{ doctor_sessions : hosts
+    patients ||--o{ appointments : books
+    doctor_sessions ||--o{ appointments : contains
+    appointments ||--o| consultation_summaries : has
+    appointments ||--o{ chat_messages : has
+    appointments ||--o{ payments : is_paid_by
+    appointments ||--o| reviews : is_reviewed_by
+    users ||--o{ notifications : receives
+    users ||--o{ notices : publishes
+    users ||--o{ audit_logs : acts
+</code></pre>
+<p>The core tables are:</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>Identity, role, password hash, account status, token version and lockout fields.</td>
+</tr>
+<tr>
+<td><code>patients</code></td>
+<td>Encrypted patient profile fields and HMAC lookup hashes.</td>
+</tr>
+<tr>
+<td><code>specialisations</code></td>
+<td>Medical specialities used by the public catalogue and manager forms.</td>
+</tr>
+<tr>
+<td><code>doctors</code></td>
+<td>Doctor profile, registration number, fee, specialisation and availability.</td>
+</tr>
+<tr>
+<td><code>rooms</code></td>
+<td>Physical consultation rooms.</td>
+</tr>
+<tr>
+<td><code>doctor_sessions</code></td>
+<td>Doctor schedules with date, time, type, capacity, delay, fee and status.</td>
+</tr>
+<tr>
+<td><code>appointments</code></td>
+<td>Bookings with queue number, encrypted reason, status, payment and lifecycle timestamps.</td>
+</tr>
+<tr>
+<td><code>consultation_summaries</code></td>
+<td>Encrypted diagnosis, advice and prescription.</td>
+</tr>
+<tr>
+<td><code>chat_messages</code></td>
+<td>Encrypted private consultation messages.</td>
+</tr>
+<tr>
+<td><code>payments</code></td>
+<td>Payment status, method, amount and reference.</td>
+</tr>
+<tr>
+<td><code>reviews</code></td>
+<td>One feedback record per completed appointment.</td>
+</tr>
+<tr>
+<td><code>notifications</code></td>
+<td>In-app notifications for affected users.</td>
+</tr>
+<tr>
+<td><code>notices</code></td>
+<td>Hospital notices published by staff.</td>
+</tr>
+<tr>
+<td><code>audit_logs</code></td>
+<td>Append-only record of sensitive actions.</td>
+</tr>
+</tbody>
+</table>
+<p>Important constraints include unique booking references, unique appointment numbers per session, one active appointment per patient per session, one completed payment per appointment, one review per appointment, one summary per appointment, rating between 1 and 5, non-negative fees and status enums. Indexes cover session discovery, queue lookups, notification unread counts, review averages and audit-log recency. A <code>BEFORE INSERT</code> trigger locks the session row while allocating an appointment number, so concurrent bookings cannot duplicate a number or exceed capacity.</p>
+<p>Seed data is fictional only. The live catalogue shows 40 doctors, 15 specialisations and 50 bookable sessions in the current week. All test patients created during verification use generated fictional identities and are clearly labelled as verification data. No real NIC numbers, phone numbers or medical records were used.</p>
+<h2 id="6-api-design">6. API design</h2>
+<p>The API is documented in <code>be/docs/API_REFERENCE.md</code>. It uses JSON only, <code>/api/v1</code> as the base path, Bearer tokens for protected routes, and a consistent error envelope:</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: false,
+  &quot;errorCode&quot;: &quot;FORBIDDEN&quot;,
+  &quot;message&quot;: &quot;You are not authorized to access this appointment.&quot;,
+  &quot;referenceId&quot;: &quot;...&quot;,
+  &quot;timestamp&quot;: &quot;2026-11-26T06:00:00Z&quot;
+}
+</code></pre>
+<p>Common status codes are <code>200</code> for success, <code>201</code> for creation, <code>204</code> for no-content visibility changes, <code>400</code> for validation errors, <code>401</code> for unauthenticated or invalid credentials, <code>403</code> for role or ownership denial, <code>404</code> for not found or hidden resources and <code>409</code> for state conflicts such as duplicate bookings or booking outside the allowed window. A global exception handler produces the same JSON shape for all errors and never returns stack traces or personal data.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Main endpoints</th>
+<th>Access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication</td>
+<td><code>POST /auth/register</code>, <code>POST /auth/login</code>, <code>POST /auth/ws-ticket</code></td>
+<td>Public / authenticated</td>
+</tr>
+<tr>
+<td>Patient profile</td>
+<td><code>GET, POST, PUT /patients/me</code></td>
+<td>CUSTOMER</td>
+</tr>
+<tr>
+<td>Appointments</td>
+<td><code>POST /appointments</code>, <code>GET /appointments/me</code>, <code>PATCH /appointments/{id}/cancel</code>, <code>PATCH /appointments/{id}/check-in</code>, <code>PATCH /appointments/{id}/hide</code></td>
+<td>CUSTOMER; staff where permitted</td>
+</tr>
+<tr>
+<td>Queue</td>
+<td><code>GET /sessions/{id}/queue</code></td>
+<td>Public/authenticated</td>
+</tr>
+<tr>
+<td>Payments</td>
+<td><code>POST /appointments/{id}/payments</code>, <code>GET /payments/me</code></td>
+<td>CUSTOMER, MANAGER, ADMIN</td>
+</tr>
+<tr>
+<td>Doctor portal</td>
+<td><code>GET /doctor/sessions</code>, <code>GET /doctor/appointments</code>, <code>PATCH</code> actions</td>
+<td>DOCTOR</td>
+</tr>
+<tr>
+<td>Consultation summaries</td>
+<td><code>POST /summaries</code>, <code>GET /summaries/{appointmentId}</code></td>
+<td>Treating doctor and patient only</td>
+</tr>
+<tr>
+<td>Chat</td>
+<td><code>GET /appointments/{id}/chat/messages</code>, STOMP <code>/app/.../chat</code></td>
+<td>Patient and treating doctor only</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td><code>GET /notifications</code>, <code>PATCH /notifications/read-all</code></td>
+<td>Owner only</td>
+</tr>
+<tr>
+<td>Administration</td>
+<td><code>GET /admin/users</code>, <code>PATCH /admin/users/{id}/activate</code>, audit logs</td>
+<td>ADMIN</td>
+</tr>
+<tr>
+<td>Sessions and doctors</td>
+<td>Public search; manager/admin create, edit, delay, cancel</td>
+<td>Public read, staff write</td>
+</tr>
+<tr>
+<td>Notices and feedback</td>
+<td>Public read; staff publish and moderate</td>
+<td>Public/staff</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td>Appointment, revenue, no-show and rating reports</td>
+<td>ADMIN/MANAGER</td>
+</tr>
+<tr>
+<td>Health</td>
+<td><code>GET /actuator/health</code></td>
+<td>Public operational endpoint</td>
+</tr>
+</tbody>
+</table>
+<p>Login returns a short-lived JWT with role and token-version claims. The Next.js BFF stores the JWT in an HTTP-only, Secure <code>__Host-</code> cookie and attaches it to backend calls. Five failed logins lock an account for 15 minutes. One general error is returned for wrong credentials so accounts cannot be enumerated.</p>
+<h2 id="7-authentication-roles-and-permissions">7. Authentication, roles and permissions</h2>
+<p>MediChannel implements four roles exactly as required.</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Main permissions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Guest</td>
+<td>Search doctors and sessions, see live numbers, read notices, register and log in.</td>
+</tr>
+<tr>
+<td>CUSTOMER</td>
+<td>Book physical and online appointments, view and cancel own appointments, follow the live queue, join own consultation, read own summary, give feedback and manage profile.</td>
+</tr>
+<tr>
+<td>DOCTOR</td>
+<td>See own sessions and patient lists, start sessions, call next patient, mark completed or no-show, run online consultation, chat and publish summaries.</td>
+</tr>
+<tr>
+<td>MANAGER</td>
+<td>Manage specialisations, rooms, doctor profiles and sessions; reception check-in, payments and walk-in booking; notices, feedback moderation, dashboard and reports.</td>
+</tr>
+<tr>
+<td>ADMIN</td>
+<td>Create doctor and manager accounts, list/search users, activate/deactivate accounts, reset staff passwords, view audit log and system dashboard.</td>
+</tr>
+</tbody>
+</table>
+<p>Permissions are checked on the server in Spring Security and in service-layer ownership policies. Hiding a role-specific button in the frontend is treated only as usability support. Live verification showed a patient receiving <code>403</code> for manager reports, doctor sessions, doctor accept and doctor appointment-list endpoints. Chat and consultation summary access is limited to the patient who owns the appointment and the doctor assigned to it; staff are excluded by an explicit <code>isStaff</code> rule. Admin and manager cannot read consultation notes, prescriptions, reasons for visit or chat messages.</p>
+<p>The first administrator is created at startup from <code>APP_ADMIN_EMAIL</code> and <code>APP_ADMIN_PASSWORD</code>. Those values are supplied only through environment variables and are never committed. All non-deleted accounts can be reset by an authorized administrator, with a forced password change on first login. The general password policy requires at least eight characters with a letter, a number and a symbol; bcrypt cost 12 is used.</p>
+<h2 id="8-encryption-and-security-evidence">8. Encryption and security evidence</h2>
+<p>Personal and medical fields are encrypted with AES-256-GCM using a random IV for every value. Encrypted fields include patient first and last name, NIC, date of birth, gender, phone, address, appointment reason, diagnosis, advice, prescription and chat messages. Deterministic lookup columns use HMAC-SHA256 of the normalised email and NIC so login, uniqueness and search do not require decryption. Encryption keys, HMAC keys, JWT secret and database password come only from environment variables.</p>
+<p>The live verification report records the following evidence:</p>
+<ul>
+<li>patient first and last name stored with <code>v1:</code> ciphertext prefix and length 107 characters at rest;</li>
+<li>appointment reason stored with <code>v1:</code> ciphertext prefix and length 95 characters at rest;</li>
+<li>the treating doctor reads the decrypted name <code>Demo Verification</code> through the API;</li>
+<li>CORS allows the production Vercel origin and the protected preview origin, while random origins are rejected;</li>
+<li>patient role-denial probes return <code>403</code>;</li>
+<li>backend health is <code>UP</code> and Flyway version is <code>29</code>.</li>
+</ul>
+<p>A database evidence extract is shown below. It is deliberately truncated: only the prefix and length are shown, not full ciphertext or personal values.</p>
+<div style="font-family: monospace; font-size: 10pt; background: #111827; color: #e5e7eb; padding: 12px; border: 1px solid #374151;">
+SELECT left(first_name_encrypted, 4) AS prefix, length(first_name_encrypted) AS len<br>
+FROM patients ...;<br>
+&nbsp;&nbsp;prefix | len<br>
+&nbsp;&nbsp;v1:   | 107<br><br>
+Treating doctor API view: firstName = "Demo Verification"<br>
+Appointment reason at rest: prefix = v1:, length = 95
+</div>
+
+<p><strong>Figure 2 — Redacted ciphertext evidence, consistent with <code>verification/LIVE_VERIFICATION_REPORT.md</code>.</strong></p>
+<p>Transport security uses HTTPS for all frontend and API traffic and WSS for WebSockets. The frontend sets strict security headers including CSP, HSTS, X-Frame-Options, Referrer-Policy and Permissions-Policy. The API uses exact-origin CORS and WebSocket origin checks. Audit logs record login, account changes, session cancellations and consultation-record opening with user, action, time and IP; database triggers prevent update and delete, and log rows never contain medical data.</p>
+<h2 id="9-booking-rules-br-01-to-br-11">9. Booking rules BR-01 to BR-11</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Implementation</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BR-01 Session fields and status</td>
+<td><code>doctor_sessions</code> stores doctor, date, start/end, type, capacity, minutes, fee and status; physical sessions require a room.</td>
+<td>ERD, API reference, session pages</td>
+</tr>
+<tr>
+<td>BR-02 No overlapping doctor or room sessions</td>
+<td>Service overlap check plus database trigger.</td>
+<td>Traceability matrix, integration tests</td>
+</tr>
+<tr>
+<td>BR-03 Unique, monotonic appointment numbers</td>
+<td>Row-locking trigger allocates numbers; cancelled numbers are never reused.</td>
+<td>Live E2E issued physical queue #4 and online #1</td>
+</tr>
+<tr>
+<td>BR-04 One active appointment per patient per session</td>
+<td>Partial unique index and service check.</td>
+<td>Automated booking tests</td>
+</tr>
+<tr>
+<td>BR-05 Cutoffs</td>
+<td>Physical booking closes 60 minutes before start; online closes 30 minutes before start; no booking during 11:00–13:00 break.</td>
+<td>API reference, live runbook</td>
+</tr>
+<tr>
+<td>BR-06 Estimated time</td>
+<td>Start time plus <code>(number − 1) × minutes per patient + delay</code>.</td>
+<td>Booking response includes estimated time</td>
+</tr>
+<tr>
+<td>BR-07 Cancellation</td>
+<td>Unpaid appointment may be cancelled up to three hours before the session; row retained with <code>CANCELLED</code> status.</td>
+<td>Live cancellation notification and retained history</td>
+</tr>
+<tr>
+<td>BR-08 Status flow</td>
+<td>Physical: <code>BOOKED → ARRIVED → IN_CONSULTATION → COMPLETED</code>; online skips arrival; not seen becomes <code>NO_SHOW</code>.</td>
+<td>Live workflow persisted row</td>
+</tr>
+<tr>
+<td>BR-09 Consultation room</td>
+<td>Opens only when doctor starts that appointment; only patient and treating doctor admitted; read-only after completion.</td>
+<td>Chat ownership tests and lifecycle tests</td>
+</tr>
+<tr>
+<td>BR-10 Validation</td>
+<td>Sri Lankan NIC 9 digits + V/X or 12 digits; phone <code>07XXXXXXXX</code>; unique email/NIC; password complexity.</td>
+<td>Validation tests, registration form</td>
+</tr>
+<tr>
+<td>BR-11 History protection</td>
+<td>Historic rows are hidden or soft-deleted, not physically removed; Asia/Colombo time; money uses <code>NUMERIC</code>.</td>
+<td>Hide endpoints returned <code>204</code>; rows retained in DB</td>
+</tr>
+</tbody>
+</table>
+<p>The final post-reset E2E run verified physical and online booking, queue numbers, acceptance, payment, physical check-in, arrival, consultation start, chat, completion, summary publication, cancellation notification, retained cancelled history and patient hide operations. The corresponding database rows show <code>COMPLETED|ACCEPTED|PAID</code> with all lifecycle and hide flags persisted.</p>
+<h2 id="10-real-time-design">10. Real-time design</h2>
+<p>Real-time communication uses Spring WebSocket with STOMP over SockJS and <code>wss://</code> in production. Clients first request a short-lived WebSocket ticket, then connect to <code>/ws</code> with the ticket. The server derives identity from the authenticated principal; clients cannot forge a sender field.</p>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/topic/queue/{sessionId}</code></td>
+<td>Now-serving number and live queue updates.</td>
+</tr>
+<tr>
+<td><code>/topic/availability</code></td>
+<td>Numbers-left updates after booking, cancellation and payment.</td>
+</tr>
+<tr>
+<td><code>/user/queue/notifications</code></td>
+<td>Private notifications for the affected user.</td>
+</tr>
+<tr>
+<td><code>/topic/appointments/{appointmentId}/chat</code></td>
+<td>Private consultation chat.</td>
+</tr>
+<tr>
+<td><code>/topic/appointments/{appointmentId}/typing</code></td>
+<td>Typing indicator.</td>
+</tr>
+</tbody>
+</table>
+<p>RT-01 is implemented by publishing queue updates when the doctor calls the next patient. RT-02 is implemented by publishing availability changes after bookings and cancellations. RT-03 is implemented through participant-only chat with encrypted persistence, typing indicators and connection-state handling in the client. RT-04 delivers called, three-away, consultation-started, delayed and cancelled notifications only to the affected user. Chat messages are limited to 1,000 characters, subscriptions and sends are permission-checked, and disallowed destinations are denied by default. The client reconnects after network drops.</p>
+<h2 id="11-frontend-design">11. Frontend design</h2>
+<p>The Next.js frontend uses the App Router and React 19. It provides reusable components, bound forms with field-level errors, loading, empty and error states, route protection and one server-side API helper using <code>API_URL</code>. The visual interface is responsive for phones and desktops, uses self-hosted Tailwind CSS under <code>public/vendor/</code>, and preserves the hospital brand colours.</p>
+<p>The public welcome page shows live counters from the backend: 40 doctors, 15 specialisations and 50 bookable sessions this week. The doctor catalogue supports filtering by name, specialisation, date and session type. Session cards show date, time, room or online type, fee and remaining numbers. The patient workspace includes appointment history, queue position, consultation room, summary, feedback and profile. Doctor, manager and admin workspaces expose their role-specific panels through deep links and protected navigation.</p>
+<p>Authentication is handled by route handlers under <code>/api/auth/*</code>. Backend calls go through <code>/api/backend/*</code>, which attaches the token from the HTTP-only cookie. Personal data responses use <code>no-store</code>; HTML and versioned static assets use safe revalidation and immutable caching. The frontend never places tokens in JavaScript-readable storage and never exposes <code>API_URL</code> through a <code>NEXT_PUBLIC_*</code> variable.</p>
+<p>Performance remediation was measured with Lighthouse. Final local measurements were 96/100/100/100 on simulated mobile, 96/100/100/100 on DevTools-throttled mobile and 100/100/100/100 on desktop, with CLS between 0.010 and 0.011. These figures are local evidence and complement, rather than replace, the live functional verification.</p>
+<h2 id="12-feedback-notices-dashboards-and-reports">12. Feedback, notices, dashboards and reports</h2>
+<p>Feedback is stored in the <code>reviews</code> table with a 1–5 rating and a comment. A patient can submit only one review per completed appointment, and managers can approve, hide or delete feedback through moderation endpoints. Notices are stored in the <code>notices</code> table, published by staff and readable publicly. They appear on the welcome screen and role dashboards.</p>
+<p>Manager and admin dashboards are backed by backend queries rather than client-side invented numbers. Reports include today’s sessions with live status, appointments per day, physical versus online split, no-show rate, revenue, top doctors and average rating per doctor. All numbers are calculated with SQL or JPA aggregation in the backend. The doctor catalogue exposes average rating computed from reviews. Reception search, check-in, payment recording and walk-in booking are wired to real endpoints.</p>
+<h2 id="13-caching-performance-and-deployment">13. Caching, performance and deployment</h2>
+<p>The deployment order follows the brief: PostgreSQL first, then the Spring Boot API, then the Next.js frontend. The current production stack uses Supabase PostgreSQL, Heroku for Spring Boot and Vercel for Next.js. Flyway version 29 is live. The backend sets <code>APP_FRONTEND_ORIGIN</code> to the exact Vercel production and preview origins; no wildcard origin is accepted in production. Frontend API URLs are set only as server-side environment variables.</p>
+<p>Public doctor and specialisation lists use a TTL cache in the backend service layer and correct <code>Cache-Control</code> headers. Personal data responses are <code>no-store</code>. Response compression is enabled. The frontend uses self-hosted, versioned assets and a same-origin wake route to handle sleeping free-tier backends. A keep-alive workflow pings the health endpoint every 10 minutes as best effort.</p>
+<p>Operational evidence from 26 November 2026:</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend production commit</td>
+<td><code>00bfe0d</code></td>
+</tr>
+<tr>
+<td>Backend production commit</td>
+<td><code>a555f11</code>, Heroku release <code>v58</code></td>
+</tr>
+<tr>
+<td>Backend health</td>
+<td><code>UP</code></td>
+</tr>
+<tr>
+<td>Database migration</td>
+<td>Flyway <code>29</code></td>
+</tr>
+<tr>
+<td>Production CORS</td>
+<td>Vercel production and preview origins allowed</td>
+</tr>
+<tr>
+<td>Guardrails</td>
+<td><code>APP_DEMO_SEED=false</code>; <code>APP_RESET_ALL_PASSWORDS</code> unset</td>
+</tr>
+</tbody>
+</table>
+<h2 id="14-testing">14. Testing</h2>
+<p>Testing is organised at four levels.</p>
+<p><strong>Backend unit and integration tests.</strong> The Spring Boot project has layered tests for services, controllers, security, booking rules, consultation lifecycle, admin operations and WebSocket interception. The test report documents 88 passing backend tests in the final cycle. Tests use disposable PostgreSQL instances with Flyway migrations so database triggers and constraints are exercised.</p>
+<p><strong>Frontend tests.</strong> The Next.js project has Node contract and smoke suites covering API clients, patient flows, manager UI, backend proxy behaviour, public notices, realtime/chat behaviour, CSP and cache headers. The frontend suite reached 114 unit checks and 54 smoke checks in the final remediation cycle.</p>
+<p><strong>Manual QA.</strong> A separate black-box QA folder records browser actions, status legends, public pages, auth, manager screens, booking rules, security checks and defects. Its evidence directory contains screenshots captured through Firefox. Later authenticated phases were originally blocked by credential availability; the final post-reset E2E supersedes those blockers.</p>
+<p><strong>Live end-to-end verification.</strong> The final post-reset run on 26 November 2026 passed 40 of 40 checks and the post-check script passed 12 of 12 checks. The E2E run created a fictional patient, booked physical and online appointments, accepted and paid them, performed check-in and arrival, started consultations, exchanged chat messages, completed consultations, published and read a summary, confirmed role denial, demonstrated cancellation notification, retained cancelled history and hid completed appointments. Post-checks confirmed re-login, retained completed appointment, decrypted doctor view, ciphertext at rest, health, Flyway, CORS and persistence.</p>
+<p>The required 30-case table is in <code>fe/docs/TEST_CASES_30.md</code>. It covers login for all roles, wrong password lockout, forced password change, CORS allow/deny, WebSocket handshake and ticket replay, booking cutoffs, duplicate booking, capacity, monotonic numbers, cancellation rules, arrival gate, chat access gate, RT queue and notifications, typing indicator, staff creation, audit entries and health endpoint.</p>
+<table>
+<thead>
+<tr>
+<th>Test category</th>
+<th style="text-align: right;">Count in 30-case table</th>
+<th>Representative result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication and lockout</td>
+<td style="text-align: right;">6</td>
+<td>JWT cookie set; lockout after failed attempts</td>
+</tr>
+<tr>
+<td>CORS and WebSocket</td>
+<td style="text-align: right;">6</td>
+<td>Exact origins allowed; attacker origin and replay rejected</td>
+</tr>
+<tr>
+<td>Booking and BR rules</td>
+<td style="text-align: right;">8</td>
+<td>Capacity, duplicate, cutoff, cancellation and status transitions enforced</td>
+</tr>
+<tr>
+<td>Real-time</td>
+<td style="text-align: right;">5</td>
+<td>Queue, availability, notifications and typing update</td>
+</tr>
+<tr>
+<td>Admin and audit</td>
+<td style="text-align: right;">3</td>
+<td>Staff creation, login audit and consultation access audit</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td style="text-align: right;">2</td>
+<td>Health and login endpoints verified</td>
+</tr>
+</tbody>
+</table>
+<h2 id="15-screenshots-and-evidence">15. Screenshots and evidence</h2>
+<p>The following screenshots and evidence files are included with the submission:</p>
+<table>
+<thead>
+<tr>
+<th>Evidence</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>verification/evidence/prod-welcome-live-stats.png</code></td>
+<td>Production welcome page with live counters: 40 doctors, 15 specialisations and 50 sessions.</td>
+</tr>
+<tr>
+<td><code>verification/evidence/prod-login-auth-spacing.png</code></td>
+<td>Production login/auth button spacing after the frontend fix.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-01-homepage-desktop.png</code></td>
+<td>Public homepage on desktop.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-01-homepage-mobile-360.png</code></td>
+<td>Responsive public homepage at 360 px.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-02-doctor-search-list.png</code></td>
+<td>Doctor catalogue.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-05-public-notices.png</code></td>
+<td>Public notices.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-08-patient-appointments.png</code></td>
+<td>Patient appointments view.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-13-manager-session-management.png</code></td>
+<td>Manager session management.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-20-session-cancel-dialog.png</code></td>
+<td>Session cancellation confirmation.</td>
+</tr>
+<tr>
+<td><code>medichannel-assignment2-qa/evidence/TC-70-registration-validation.png</code></td>
+<td>Client-side registration validation.</td>
+</tr>
+<tr>
+<td><code>verification/logs/live-e2e-20261126-133835-postreset-final.log</code></td>
+<td>40/40 live E2E transcript.</td>
+</tr>
+<tr>
+<td><code>verification/logs/post-e2e-20261126-133835-postreset-final.log</code></td>
+<td>12/12 post-check transcript.</td>
+</tr>
+</tbody>
+</table>
+<p><img src="../../verification/evidence/prod-welcome-live-stats.png" alt="Production welcome page with live counters" width="640" /></p>
+<p><strong>Figure 3 — Production welcome page with live backend counters.</strong></p>
+<p><img src="../../verification/evidence/db-ciphertext-redacted-evidence.png" alt="Redacted database ciphertext evidence" width="640" /></p>
+<p><strong>Figure 4 — Redacted database ciphertext evidence and the same fictional patient shown in the application.</strong></p>
+<p><img src="../../../medichannel-assignment2-qa/evidence/TC-13-manager-session-management.png" alt="Manager session management screen" width="640" /></p>
+<p><strong>Figure 5 — Manager session management screen captured during QA.</strong></p>
+<h2 id="16-reflection">16. Reflection</h2>
+<p>The most valuable design decision was enforcing critical rules in the service layer and database rather than relying on the browser. The appointment-number trigger, partial unique indexes and ownership policies prevented duplicate numbers and cross-user access even when API calls were made directly. This made the live role-denial and booking tests reliable.</p>
+<p>The hardest part was coordinating a large system across four roles and a real-time layer while keeping the frontend visually faithful to the supplied design. Early QA found several issues: stale deployment URLs, static staff panels, missing notice and audit features, and incomplete caching. The team resolved these by wiring staff endpoints, adding migrations for notices and audit logs, implementing TTL caching and rebuilding deployment documentation around the live Vercel, Heroku and Supabase stack.</p>
+<p>Security required particular care. Encrypting fields with random IVs is straightforward, but preserving search and uniqueness requires deterministic HMAC columns. The team also had to ensure that admin and manager never gained access to clinical text. The final privacy rule is enforced in services and confirmed by tests: only the patient and treating doctor can read summaries, reasons and chat.</p>
+<p>The main lesson is that evidence is part of the implementation. A feature is not complete until it works on the live URL, has a test, and can be explained by a group member. The final verification scripts therefore select sessions dynamically, use unique fictional patients and avoid destructive changes to required demo sessions.</p>
+<h2 id="17-ai-tool-disclosure-and-ethics">17. AI tool disclosure and ethics</h2>
+<p>OpenCode, an AI coding agent, was used during this assignment to draft and revise documentation, generate verification scripts, analyse logs and check the report against the brief. AI-generated text and scripts were reviewed by the team and checked against live API responses, database evidence and repository state. No AI tool was used to fabricate test results, invent patient data or create false evidence. All patient data created during verification is fictional. All team members are able to explain their own work and the submitted implementation.</p>
+<p>External sources were limited to official documentation and libraries used by the stack, including Next.js, Spring Boot, Spring Security, Spring WebSocket, Flyway, PostgreSQL and Tailwind CSS. No copied group submission or unacknowledged external report was used.</p>
+<h2 id="18-final-evidence-map-against-the-marking-scheme">18. Final evidence map against the marking scheme</h2>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th style="text-align: right;">Max</th>
+<th>How this submission addresses it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. Database design</td>
+<td style="text-align: right;">10</td>
+<td>ERD, schema.sql, migrations, constraints, indexes, triggers, fictional seed data</td>
+</tr>
+<tr>
+<td>B. Spring Boot API</td>
+<td style="text-align: right;">12</td>
+<td>Layered architecture, DTOs, validation, status codes, global error handler, health endpoint</td>
+</tr>
+<tr>
+<td>C. Auth, roles and permissions</td>
+<td style="text-align: right;">10</td>
+<td>Four roles, server-side authorization, ownership, lockout, secure cookie, live 403 evidence</td>
+</tr>
+<tr>
+<td>D. Encryption and security</td>
+<td style="text-align: right;">12</td>
+<td>AES-GCM, HMAC, bcrypt, HTTPS/WSS, CORS, audit log, ciphertext/decryption evidence</td>
+</tr>
+<tr>
+<td>E. Booking rules</td>
+<td style="text-align: right;">10</td>
+<td>BR-01 to BR-11 implemented and mapped to live E2E evidence</td>
+</tr>
+<tr>
+<td>F. Real-time WebSockets</td>
+<td style="text-align: right;">12</td>
+<td>RT-01 to RT-04, STOMP destinations, permission checks, encrypted chat, notifications</td>
+</tr>
+<tr>
+<td>G. Next.js frontend</td>
+<td style="text-align: right;">10</td>
+<td>Role areas, components, forms, states, responsive UI, Lighthouse evidence</td>
+</tr>
+<tr>
+<td>H. Feedback, notices, dashboards</td>
+<td style="text-align: right;">5</td>
+<td>Reviews, moderation, notices, backend-calculated reports</td>
+</tr>
+<tr>
+<td>I. Caching, deployment</td>
+<td style="text-align: right;">6</td>
+<td>TTL cache, Cache-Control, compression, Vercel/Heroku/Supabase, health evidence</td>
+</tr>
+<tr>
+<td>J. Testing and documentation</td>
+<td style="text-align: right;">8</td>
+<td>30-case table, layered tests, 40/40 E2E, 12/12 post-checks, this report</td>
+</tr>
+<tr>
+<td>K. Presentation and demo</td>
+<td style="text-align: right;">5</td>
+<td>Slides in PPT format, demo script, 8–10 minute backup recording link</td>
+</tr>
+</tbody>
+</table>
+<p>This report is designed to provide complete, traceable evidence for every criterion. The final mark remains the lecturer’s decision.</p>
+<h2 id="19-conclusion">19. Conclusion</h2>
+<p>MediChannel now covers the required full-stack system: a responsive Next.js frontend, a layered Spring Boot REST and WebSocket backend, a constrained PostgreSQL schema, four secure roles, encrypted personal and medical data, complete booking rules, real-time queue and consultation features, feedback, notices, dashboards, caching and free hosting deployment. The live system was verified end to end with 40 passing E2E checks and 12 passing post-checks, using fictional data only and without exposing secrets.</p>
+<p>The group's work demonstrates that a hospital channelling system can be both fast and secure: patients receive queue numbers and live updates, doctors run consultations privately, managers operate reception and sessions, and administrators retain auditable control. The main remaining limitation is that final presentation performance and Q&amp;A can only be assessed live. On documentation evidence, the submission is complete and ready for review.</p>
+</body>
+</html>

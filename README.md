@@ -18,9 +18,14 @@ The repository contains a Next.js frontend and a Spring Boot backend. The backen
 
 ## Deployment Architecture
 
-- Frontend hosting: Vercel (this repository), with Netlify as an alternative
-- Backend hosting: Render (separate [`medichannel-backend`](https://github.com/wcm24b126-hue/medichannel-backend) repository)
-- Database hosting: Neon PostgreSQL
+**Current production:** Vercel frontend, Heroku Spring Boot backend and Supabase PostgreSQL.
+
+- Frontend: `https://medichannel-f-p3z5.vercel.app/`
+- API: `https://evening-plains-20028-0ce7ee55df0f.herokuapp.com/`
+- Backend repository: [`medichannel-backend`](https://github.com/wcm24b126-hue/medichannel-backend)
+- Database: Supabase PostgreSQL, Flyway version `29`
+
+Render/Neon/Netlify mentions later in this README are historical alternatives and are superseded by the current production stack above.
 
 This repository contains only the Next.js frontend. The root [`vercel.json`](./vercel.json) configures Vercel and [`netlify.toml`](./netlify.toml) configures the optional Netlify deployment. The Spring Boot backend, its `Dockerfile`, and its `render.yaml` live in the backend repository.
 
